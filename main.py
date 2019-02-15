@@ -1,7 +1,6 @@
 import json
 import nacl.encoding
 import nacl.signing
-from anytree import Node, RenderTree
 from hashlib import sha256 as H
 
 # transaction
@@ -12,12 +11,19 @@ from hashlib import sha256 as H
 # }
 
 class Output:
-    def __init__(value, pubkey):
+    def __init__(self, value, pubkey):
         self.value = value
         self.pubkey = pubkey
 
+    def compare(obj2):
+        if self.value == obj2.value:
+            if self.pubkey == obj2.pubkey:
+                return 1
+        else:
+            return 0
+
 class Input:
-    def __init__(number, output):
+    def __init__(self, number, output):
         self.number = number
         self.output:Output = output #each input holds 1 output
 
@@ -26,24 +32,14 @@ class Transaction:
         self.input = inputs
         self.outputs = outputs
         self.sig = sig
-        self.number = H(b'inputs').update(b'outputs').update(b'sig')
+        #TODO: self.number = hash()
 
     def verify_number_hash():
-        temp = H(b'inputs').update(b'outputs').update(b'sig')
+        #TODO: self.number = hash()
         if temp != number:
             return 0
         else:
             return 1
-
-    # TODO: multiple inputs, multiple outputs? list?
-    def pretty_print_tx(tx):
-        print(json.dumps(
-        [{"number": tx.number,
-          "input": [{"number": tx.input.number, "output": {"value": 5, "pubkey": 5}}],
-          "output": [{"value": 5, "pubkey": 5}],
-          "sig":5
-         }]
-         ))
 
 # block
 # {"tx": <a single transaction>,
@@ -58,44 +54,77 @@ class Block:
         self.nonce = nonce
         self.pow = pow
 
+# Self-made tree/node structure that stores height
+class TreeNode:
+    def __init__(self, currBlock:Block, prevBlock:Block, height):
+        self.block = currBlock
+        self.prevBlock = prevBlock
+        self.height = height
+
 class Node:
-    def __init__(gen_block:Block, tx_list):
-        self.root = Node("root", block_number=1, block=gen_block, height=1)
-        self.tx_pool = txList
+    def __init__(self, gen_block:Block):
+        self.root = TreeNode(gen_block, None, 1)
         self.current_max_height = 1
+        self.tx_list = []
+        self.treenode_list = []
+        self.treenode_list.append(self.root)
+        self.node_list = []
 
     def verify_not_used(local_tx:Transaction):
-        #TODO: double check
-        #if root.search.find(node.block.tx.number == _tx.number) != None:
-        if 1:
+        for x in treenode_list:
+            if local_tx.number == x.block.tx.number:
+                return 0
+        return 1
+
+    def verify_tx_inputs(local_tx:Transaction):
+        flag = 1
+        for x in local_tx.input:
+            for y in self.tx_list:
+                if local_tx.input.number == self.tx_list:
+                    flag+=1
+        return max(flag - len(local_tx.input),0)
+
+    def verify_input_output(tx:Transaction):
+        flag = 1
+        for x in local_tx.input:
+            for y in treenode_list:
+                if local_tx.input.number == y.block.tx.number:
+                    flag+=1
+        return max(flag - len(local_tx.input),0)
+
+    def verify_public_key_signatures(tx:Transaction):
+        #check same public key
+        pubkey1 = tx.input(1).output.pubkey
+        for x in tx.input:
+            if x.output.pubkey != pubkey1:
+                return 0
+        #TODO: check if signature covers the tx
+        message = b'0'
+        if verify(message, tx.sig, encoder=nacl.encoding.HexEncoder):
             return 1
         else:
             return 0
 
-    def verify_input_UTXO(local_tx:Transaction):
-        flag = 1
-        for x in local_tx.input:
-            if 1:
-            #if root.search.find( == x.number) != None:
-                flag *= 1
-            else:
-                flag = 0
-        return flag
 
-    def verify_input_output(tx:Transaction):
+    def verify_double_spend(tx:Transaction, treenode:TreeNode):
         flag = 1
         for x in tx.input:
-            if 1:
-                return 1
-            else:
-                return 1
+            while treenode.prev != None:
+                for y in treenode.block.tx.inputs:
+                    if y.output.compare(x.output):
+                        return 0
+        else:
+            return 1
 
-    def verify_double_spend(tx:Transaction):
-        return 1
 
     def verify_sum(tx:Transaction):
-        return 1
-        #tx.inputs
+        input_sum = 0
+        output_sum = 0
+        for x in tx.inputs:
+            input_sum += x.output.value
+        for y in tx.outputs:
+            output_sum += y.value
+        return (x == y)
 
     def verify(tx:Transaction):
         flag = tx.verifyNumberHash
@@ -106,29 +135,53 @@ class Node:
         flag *= verify_sum(tx)
         return bool(flag)
 
+    def mineBlock(tx:Transaction):
+        #TODO: hashed block under target/increment nonce stuff here
+        #once verified, push nonce/pow/prev into a new block and send it out
+        new_block = Block(tx, prev, nonce, pow)
+        treenode_list.append(TreeNode(new_block, prev, prevBlock.height+1))
+        sendBlock(new_block)
+        for x in tx.outputs:
+            self.tx_list.append(x)
 
-    def maxHeight():
-        return True
+    def sendBlock():
+        self.sendBlock = new_block
+        #TODO: sending block over threads
 
 
-    def mineBlock(Transaction):
-        return 1
 
-    def anytreePrintNodeView():
-        return 1
+##
+## Start of test.
+##
 
+signing_key = []
+verify_key = []
+verify_key_hex = []
 
 # Generate 8 random pksk pairs
 for i in range (0,8):
-    signing_key = nacl.signing.SigningKey.generate()
-    verify_key = hex(signing_key.verify_key)
-    verify_key_hex = hex(verify_key.encode(encoder=nacl.encoding.HexEncoder))
+    signing_key_new = nacl.signing.SigningKey.generate()
+    verify_key_new = signing_key_new.verify_key
+    verify_key_hex_new = verify_key_new.encode(encoder=nacl.encoding.HexEncoder)
+    signing_key.append(signing_key_new)
+    verify_key.append(verify_key_new)
+    verify_key_hex.append(verify_key_hex_new)
 
-# Generate genesis tx for gen block. All 8 pksk pairs get 100 coins
+# Generate contents for gen block. All 8 pksk pairs get 100 coins
 for i in range (0,8):
-    output_list = Output(int(100), verify_key)
+    output_list = Output(100, verify_key)
 
-gen_transaction = Transaction(None, output_list)
+empty_input_list = []
+gen_transaction = Transaction(empty_input_list, output_list, 0)
 
 # Generate genesis block
-gen_block = Block(gen_transaction, H(1), H(2), H(3))
+gen_block = Block(gen_transaction, b'0', b'0', b'0')
+
+#Initialize nodes with genesis block
+node_list = []
+for i in range (0,10):
+    node_list.append(Node(gen_block))
+
+for i in range (0,10):
+    node_list[i-1].node_list = node_list
+    #node_list[i-1].tx_list.append()
