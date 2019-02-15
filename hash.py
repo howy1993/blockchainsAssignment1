@@ -82,6 +82,14 @@ def JsonBlock(tnode):
     jsonBlock["pow"] = tnode.block.pow
     return json.dumps(jsonBlock)
 
+# Creates a block list in JSON
+# inputs(s): treenode block with highest height
+# output(s): list of JSON blocks
+def blocklist(tnode):
+    # with given block with highest height, iterate backwards to genesis
+
+
+
 
 def main():
     jObj = json.dumps([
