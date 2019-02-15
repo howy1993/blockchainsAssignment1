@@ -3,13 +3,7 @@ import nacl.encoding
 import nacl.signing
 from hashlib import sha256 as H
 
-
 DIFFICULTY = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-
-
-
-
-
 
 
 # Serializes a list of JSON objects from a specific transaction
@@ -29,15 +23,12 @@ def serialize(tx, term):
             s.append(t["number"])
         elif term == "sig":
             s.append(t["sig"])
-            
     return ''.join(s)
-        
 
 # Serializes transaction, previous hash, and nonce value
-# input(s): transaction  
-# output(s): 
+# input(s): transaction, prev value, nonce value
+# output(s): a string of joined block contents
 def serialize_block(tx, prev, nonce):
-    
     # serialize specifically for a transaction
     serials = []
     for t in ["number", "input", "output", "sig"]:
@@ -64,7 +55,7 @@ def generate_number(tx):
 
     joinedSerials = "".join(serials)
     encodedSerials = joinedSerials.encode('utf-8')
-    # hash the serialized data 
+    # hash the serialized data
     hashedSerials = H(encodedSerials)
 
     return hashedSerials
@@ -86,9 +77,17 @@ def JsonBlock(tnode):
 # inputs(s): treenode block with highest height
 # output(s): list of JSON blocks
 def blocklist(tnode):
+    currNode = tnode
+    blockchain = []
+    
     # with given block with highest height, iterate backwards to genesis
+    while (currNode.prevBlock != None):
+        # create JSON from current block
+        jb = JsonBlock(tnode)
+        blockchain = [jb] + blockchain
+        currNode = currNode.prevBlock
 
-
+    return blockchain
 
 
 def main():
@@ -114,7 +113,7 @@ def main():
             "output": [
                 {
                     "value": 40.87722055316936,
-                    "pubkey": "f55fcd64b06bae4f5f13ef7c33b0d71c8c2a9a0b446bdd9158e88fb1ec131b2f" 
+                    "pubkey": "f55fcd64b06bae4f5f13ef7c33b0d71c8c2a9a0b446bdd9158e88fb1ec131b2f"
 
                  },
                 {
