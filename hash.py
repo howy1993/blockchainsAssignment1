@@ -71,8 +71,16 @@ def generate_number(tx):
 
 
 
-
-
+# Creates a JSON file for a block
+# input(s): a TreeNode
+# output(s): a JSON representation of a block
+def JsonBlock(tnode):
+    jsonBlock = {}
+    jsonBlock["tx"] = tnode.block.tx
+    jsonBlock["prev"] = tnode.block.prev
+    jsonBlock["nonce"] = tnode.block.nonce
+    jsonBlock["pow"] = tnode.block.pow
+    return json.dumps(jsonBlock)
 
 
 def main():
