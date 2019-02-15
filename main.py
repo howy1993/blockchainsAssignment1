@@ -32,6 +32,7 @@ class Transaction:
         self.input = inputs
         self.outputs = outputs
         self.sig = sig
+        self.number = 0
         #TODO: self.number = hash()
 
     def verify_number_hash():
@@ -100,6 +101,7 @@ class Node:
                 return 0
         #TODO: check if signature covers the tx
         message = b'0'
+        verify_key = nacl.signing.VerifyKey(verify_key_hex, encoder=nacl.encoding.HexEncoder)
         if verify(message, tx.sig, encoder=nacl.encoding.HexEncoder):
             return 1
         else:
@@ -167,12 +169,13 @@ for i in range (0,8):
     verify_key.append(verify_key_new)
     verify_key_hex.append(verify_key_hex_new)
 
+output_list = []
 # Generate contents for gen block. All 8 pksk pairs get 100 coins
 for i in range (0,8):
-    output_list = Output(100, verify_key)
+    output_list.append(Output(100, verify_key_hex[i]))
 
 empty_input_list = []
-gen_transaction = Transaction(empty_input_list, output_list, 0)
+gen_transaction = Transaction(empty_input_list, output_list[i], 0)
 
 # Generate genesis block
 gen_block = Block(gen_transaction, b'0', b'0', b'0')
@@ -184,4 +187,5 @@ for i in range (0,10):
 
 for i in range (0,10):
     node_list[i-1].node_list = node_list
-    #node_list[i-1].tx_list.append()
+
+print(node_list[1].node_list)
