@@ -15,9 +15,9 @@ DIFFICULTY = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 # Serializes a list of JSON objects from a specific transaction
 # input(s): json object, term (input or output)
 # output(s): a serialization of the list of inputs or outputs
-def serialize(l, term):
+def serialize(tx, term):
     s = []
-    for t in l[term]:
+    for t in tx[term]:
         if term == "input":
             s.append(t["number"])
             s.append(str(t["output"]["value"]))
@@ -25,11 +25,29 @@ def serialize(l, term):
         elif term == "output":
             s.append(str(t["value"]))
             s.append(t["pubkey"])
+        elif term == "number":
+            s.append(t["number"])
+        elif term == "sig":
+            s.append(t["sig"])
             
     return ''.join(s)
         
 
+# Serializes transaction, previous hash, and nonce value
+# input(s): transaction  
+# output(s): 
+def serialize_block(tx, prev, nonce):
+    
+    # serialize specifically for a transaction
+    serials = []
+    for t in ["number", "input", "output", "sig"]:
+        res = serialize(tx, t)
+        serials.append(res)
+    serials.append(prev)
+    serials.append(str(nonce))
+    joinedSerials = "".join(serials)
 
+    return joinedSerials
 
 
 # Generates a transaction number from a given transaction JSON object
@@ -118,6 +136,7 @@ def main():
     encodedSerials = joinedSerials.encode('utf-8')
     # hash the serialized data 
     hashedSerials = H(encodedSerials)
+
 
 
     nums = []
