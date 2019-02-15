@@ -105,57 +105,71 @@ class TreeNode:
 class Node:
     def __init__(self, gen_block:Block):
         self.root = TreeNode(gen_block, None, 1)
-        self.current_max_height = 1
         self.tx_list = []
         self.treenode_list = []
         self.treenode_list.append(self.root)
         self.node_list = []
+        self.currentMaxHeightTreeNode = self.root
 
+    # Checks that tx number is has not been used in any prevBlocks
     def verify_not_used(local_tx:Transaction):
-        for x in treenode_list:
-            if local_tx.number == x.block.tx.number:
+        y = currentMaxHeightTreeNode
+        while(y != None):
+            if local_tx.number == y.block.tx.number:
                 return 0
+            else:
+                y = y.prevBlock
         return 1
 
+    # Output exists in named transaction - this function checks for/matches numbers and output to an earlier tx
     def verify_tx_inputs(local_tx:Transaction):
         flag = 1
+        flag2 = 1
         for x in local_tx.input:
-            for y in self.tx_list:
-                if local_tx.input.number == self.tx_list:
-                    flag+=1
-        return max(flag - len(local_tx.input),0)
+            y = currentMaxHeightTreeNode
+            flag2+=1
+            while(flag < flag2):
+                if x.number == y.block.tx.number:
+                    for z in y.block.tx.outputs:
+                        if z.compare(x.output):
+                            flag+=1
+                elif y != None:
+                    y = y.prevBlock
+                else:
+                    return max(flag - len(tx.input),0)
+        return max(flag - len(local_tx.input), 0)
 
-    def verify_input_output(tx:Transaction):
-        flag = 1
-        for x in local_tx.input:
-            for y in treenode_list:
-                if local_tx.input.number == y.block.tx.number:
-                    flag+=1
-        return max(flag - len(local_tx.input),0)
-
+    # Checks public key for all inputs, checks signature
     def verify_public_key_signatures(tx:Transaction):
         #check same public key
         pubkey1 = tx.input(1).output.pubkey
         for x in tx.input:
             if x.output.pubkey != pubkey1:
                 return 0
+        #serializes content and verifies signature to key
         message = serialize(tx.input, "input")
         message += serialize(tx.outputs, "output")
         verify_key = nacl.signing.VerifyKey(verify_key_hex, encoder=nacl.encoding.HexEncoder)
         return verify(message, tx.sig, encoder=nacl.encoding.HexEncoder)
 
-
-    def verify_double_spend(tx:Transaction, treenode:TreeNode):
+    # ? Not sure if this logic is right
+    def verify_double_spend(tx:Transaction):
         flag = 1
+        flag2 = 1
         for x in tx.input:
-            while treenode.prev != None:
-                for y in treenode.block.tx.inputs:
-                    if y.output.compare(x.output):
-                        return 0
-        else:
-            return 1
+            y = currentMaxHeightTreeNode
+            flag2+=1
+            while(flag < flag2):
+                for z in y.block.tx.input:
+                    if x.number == z.number:
+                        flag+=1
+                    elif y != None:
+                        y = y.prevBlock
+                    else:
+                        return max(flag - len(tx.input),0)
+        return max(flag - len(tx.input),0)
 
-
+    # Checks sum of inputs vs outputs
     def verify_sum(tx:Transaction):
         input_sum = 0
         output_sum = 0
@@ -312,5 +326,3 @@ for i in range (0,10):
 
 if __name__ == "__main__":
     main()
-
-print(node_list[1].)
