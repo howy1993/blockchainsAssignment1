@@ -66,7 +66,7 @@ def serialize_list(l, term):
             s.append(ele["output"])
         elif term == "output":
             s.append(str(ele["value"]))
-            s.append(ele["pubkey]")
+            s.append(ele["pubkey"])
     return ''.join(s)
 
 
@@ -95,13 +95,14 @@ class Transaction:
         self.number = 0
 
     def gen_number():
-        number = generate_number(self)
-        return number
+        print(self.number)
+        print("gen number is here")
+        self.number = generate_number(self.jsonify())
+        return self.number
 
     def verify_number_hash():
-        temp = generate_number(self)
+        temp = generate_number(self.jsonify())
         return (temp == self.number)
-
 
     def jsonify():
         jsonObj = {}
@@ -366,7 +367,10 @@ for i in range (0,8):
 
 empty_input_list = []
 gen_transaction = Transaction(empty_input_list, output_list[i], 0)
-gen_transaction_number = gen_transaction.gen_number()
+print("before")
+print(gen_transaction)
+print("after")
+gen_transaction_number = gen_transaction.gen_number
 
 # Generate genesis block
 gen_block = Block(gen_transaction, b'0', None, b'0')
@@ -384,17 +388,21 @@ no_more_tx = 1
 lock = 0
 inputs_from_gen_tx = []
 outputs_from_gen_tx = []
+print(gen_transaction_number)
 
-for i in (0,3):
+for i in range (0,3):
+    print(i)
+    print(verify_key_hex[i+3])
     inputs_from_gen_tx.append(Input(gen_transaction_number, Output(100, verify_key_hex[i])))
-    outputs_from_gen_tx.append(new_output = Output(100, verify_key_hex[i+3]))
-    message = serialize(inputs_from_gen_tx, "input")
-    message += serialize(outputs_from_gen_tx, "output")
-    println(message)
-    message = message.encode("utf-8")
-    println(message)
-    sig = signing_key[i].sign(message)
-    global_tx_pool.append(Transaction(inputs_from_gen_tx, outputs_from_gen_tx, sig))
+    outputs_from_gen_tx.append(Output(100, verify_key_hex[i+3]))
+
+message = serialize_list(inputs_from_gen_tx, "input")
+message += serialize_list(outputs_from_gen_tx, "output")
+print(message)
+message = message.encode("utf-8")
+print(message)
+sig = signing_key[i].sign(message)
+global_tx_pool.append(Transaction(inputs_from_gen_tx, outputs_from_gen_tx, sig))
 
 
 if __name__ == "__main__":
