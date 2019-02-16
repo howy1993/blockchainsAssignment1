@@ -8,8 +8,11 @@ from hashlib import sha256 as H
 # input(s): json object, term (input or output)
 # output(s): a serialization of the list of inputs or outputs
 def serialize(tx, term):
+    # load the json data
+    data = json.loads(tx)
+    print("======== serialize")
     s = []
-    for t in tx[term]:
+    for t in data[term]:
         if term == "input":
             s.append(t["number"])
             s.append(str(t["output"]["value"]))
@@ -17,8 +20,8 @@ def serialize(tx, term):
         elif term == "output":
             s.append(str(t["value"]))
             s.append(t["pubkey"])
-
     return ''.join(s)
+
 
 # Generates a transaction number from a given transaction JSON object
 # input(s): a transaction JSON object
@@ -29,9 +32,10 @@ def generate_number(tx):
     for ele in ["input", "output"]:
         res = serialize(tx, ele)
         serials.append(res)
-    # add signature
-    serials.append(tx["sig"])
 
+    d = json.loads(tx)
+    # add signature
+    serials.append(str(d["sig"]))
     joinedSerials = "".join(serials)
     encodedSerials = joinedSerials.encode('utf-8')
     # hash the serialized data
@@ -59,14 +63,16 @@ def serialize_block(tx, prev, nonce):
 # input(s): list, term
 # output(s): serialized list
 def serialize_list(l, term):
+
     s = []
     for ele in l:
         if term == "input":
-            s.append(str(ele["number"]))
-            s.append(ele["output"])
+            s.append(str(ele.number))
+            s.append(str(ele.output.value))
+            s.append(str(ele.output.pubkey))
         elif term == "output":
-            s.append(str(ele["value"]))
-            s.append(ele["pubkey"])
+            s.append(str(ele.value))
+            s.append(str(ele.pubkey))
     return ''.join(s)
 
 
@@ -82,6 +88,7 @@ class Output:
         else:
             return 0
 
+
 class Input:
     def __init__(self, number, output):
         self.number = number
@@ -94,24 +101,47 @@ class Transaction:
         self.sig = sig
         self.number = 0
 
-    def gen_number():
-        print(self.number)
-        print("gen number is here")
-        self.number = generate_number(self.jsonify())
-        return self.number
+    def gen_number(self):
+        j = self.jsonify()
+        print("j = {}".format(j))
+        number = generate_number(j)
+        print("number = {}".format(number))
+        print("number digest = {}".format(number.hexdigest()))
+        self.number = number.hexdigest()
 
-    def verify_number_hash():
+    def verify_number_hash(self):
         temp = generate_number(self.jsonify())
         return (temp == self.number)
 
-    def jsonify():
+    def jsonify(self):
         jsonObj = {}
-        jsonObj["input"] = self.input
-        jsonObj["output"] = self.output
+
+        inputList = []
+        for i in self.input:
+            inputsOutDict = {}
+            inputsOutDict["number"] = i.number
+            inputsOutDict["output"]["value"] = i.output.value
+            inputsOutDict["output"]["pubkey"] = str(i.output.pubkey)
+            inputList.append(inputsOutDict)
+        jsonObj["input"] = inputList
+
+        outputList = []
+        for o in self.output:
+            outputDict = {}
+            outputDict["value"] = o.value
+            outputDict["pubkey"] = str(o.pubkey)
+            outputList.append(outputDict)
+        jsonObj["output"] = outputList
+
         jsonObj["sig"] = self.sig
         jsonObj["number"] = self.number
-        return json.dumps(jsonObj)
 
+        return json.dumps(jsonObj, indent=4)
+
+
+    def show(self):
+        print("input: {0}\noutput: {1}\nsig: {2}\nnumber: {3}\n"
+                .format(self.input, self.output, self.sig, self.number))
 
 
 # block
@@ -318,30 +348,6 @@ def main():
 
 
 
-    serials = []
-    # serialize each transaction (each input and output)
-    for tx in json.loads(jObj):
-        for ele in ["input", "output"]:
-            res = serialize(tx, ele)
-            serials.append(res)
-        # add signature
-        serials.append(tx["sig"])
-
-    joinedSerials = "".join(serials)
-    encodedSerials = joinedSerials.encode('utf-8')
-    # hash the serialized data
-    hashedSerials = H(encodedSerials)
-
-
-    nums = []
-    # for each transaction, generate a number
-    for tx in json.loads(jObj):
-        nums.append(generate_number(tx))
-
-
-    for n in nums:
-        print(n.hexdigest())
-
 
 ##
 ## Start of test.
@@ -365,12 +371,26 @@ output_list = []
 for i in range (0,8):
     output_list.append(Output(100, verify_key_hex[i]))
 
+
+print("starting prints")
 empty_input_list = []
-gen_transaction = Transaction(empty_input_list, output_list[i], 0)
-print("before")
-print(gen_transaction)
-print("after")
-gen_transaction_number = gen_transaction.gen_number
+gen_transaction = Transaction(empty_input_list, output_list, 0)
+print("gen transaction obj = {}".format(gen_transaction))
+
+j = gen_transaction.jsonify()
+print("j = {}".format(j))
+
+
+
+# generate the number for the transaction
+gen_transaction.gen_number()
+
+gen_transaction_number = gen_transaction.number
+print("gen_transaction number = {}".format(gen_transaction.number))
+
+
+print("==========")
+
 
 # Generate genesis block
 gen_block = Block(gen_transaction, b'0', None, b'0')
