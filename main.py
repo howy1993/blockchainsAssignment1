@@ -255,7 +255,7 @@ class Node:
                 return 0
             else:
                 y = y.prevBlock
-                
+
         return 1
 
     # Output exists in named transaction - this function checks for/matches numbers and output to an earlier tx
@@ -328,7 +328,7 @@ class Node:
         flag *= self.verify_double_spend(tx)
         flag *= self.verify_sum(tx)
         return bool(flag)
-    
+
     def verify_pow(self, block:Block):
         #Check that PoW is below target
         return (block.pow < 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
@@ -336,12 +336,14 @@ class Node:
     def verify_prev_hash(self, block:Block):
         #Check that PoW generated from hashing block with appropriate nonce
         block_serialized = serialize_block(block)
-        block_encoded = prev_serialized.encode('utf-8')
+        block_encoded = block_serialized.encode('utf-8')
         prevhash = H(block_encoded).hexdigest()
         return (block.prev == prevhash)
 
-    def verify_tx_in_block(self, block:Block, treenode:TreeNode):
-        return self.verify(block.tx, treenode)
+    #implements validate tx in block too
+    def verify_block(self, block:Block, treenode:TreeNode):
+        return (self.verify(block.tx, treenode) == 1 ==
+                verify_pow(block) == verify_prev_hash(block))
 
     def update_longest_chain(new_block_tree_node):
         if (new_block_tree_node.height > self.current_max_height_tree_node.height):
@@ -370,14 +372,19 @@ class Node:
         self.send_block(new_block)
 
     def send_block(new_block):
-        #for x in node_list:
-        #    x.q
-        return 1
+        for x in self.node_list:
+            if (self != x):
+                x.q.append(new_block)
 
-    def receive_block(self):
-        #TODO: validate block?
-        #update_longest_chain(new_block)
-        return 1
+    def receive_block(self, new_block):
+        for x in treenode_list:
+            block_serialized = serialize_block(x.block)
+            block_encoded = block_serialized.encode('utf-8')
+            prevhash = H(block_encoded).hexdigest()
+            if (new_block.prev == prevhash):
+                return TreeNode(new_block, x.block, x.height+1)
+        print("couldn't find a matching prevhash")
+        return TreeNode(None, None, None)
 
     def mining(self, global_tx_pool):
         print("starting mining...")
@@ -387,7 +394,10 @@ class Node:
             print("q size = {}".format(self.q.qsize()))
             if (not self.q.empty()):
                 new_block = self.q.get()
-
+                if verify_block(self):
+                    new_treenode = receive_block(new_block)
+                    self.treenode_list.append(new_treenode)
+                    self.update_longest_chain(new_treenode)
             print("global_tx_pool = {}".format(global_tx_pool))
             if(len(global_tx_pool) != 0):
                 new_tx = global_tx_pool[0]
@@ -436,7 +446,7 @@ def main():
     gen_transaction_number = gen_transaction.number
 
     #print("gen_transaction_number = {}".format(gen_transaction_number))
-    
+
     arbiPrev = H(b'arbitrary prev').hexdigest()
     arbiNonce = H(b'arbitrary nonce').hexdigest()
     arbiPow = H(b'arbitrary pow').hexdigest()
@@ -475,10 +485,10 @@ def main():
         message = message.encode("utf-8")
         sig.append(signing_key[i].sign(message))
 
-    
+
     for i in range(0, 3):
         global_tx_pool.append(Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], sig[i]))
-    
+
 
     print("======mine node[1]=========")
     node_list[1].mining(global_tx_pool)
