@@ -46,10 +46,9 @@ def generate_number(tx):
 
 
 # Serializes transaction, previous hash, and nonce value
-# input(s): transaction object, prev string, nonce integer
-# output(s): a string representation of a block
-def serialize_block(tx, prev, nonce):
-
+# input(s): transaction, prev hash, and nonce
+# output(s): string concatenation
+def serialize_pre_block(tx, prev, nonce):
     # serialize specifically for a transaction
     serials = []
     for t in ["number", "input", "output", "sig"]:
@@ -60,6 +59,34 @@ def serialize_block(tx, prev, nonce):
     joinedSerials = "".join(serials)
 
     return joinedSerials
+
+
+# creates a serialization of a Block object
+# input(s): b which is a Block object
+# output(s): string serialization of the Block attributes
+def serialize_block(b):
+    s = []
+    s.append(b.tx.serialize_self())
+    s.append(str(b.prev))
+    s.append(str(b.nonce))
+    s.append(str(b.pow))
+    return ''.join(s)
+
+
+# Creates a block list in JSON
+# inputs(s): treenode block with highest height
+# output(s): list of JSON blocks
+def blocklist(tnode):
+    currNode = tnode
+    blockchain = []
+
+    # with given block with highest height, iterate backwards to genesis
+    while (currNode.prevBlock is not None):
+        # create JSON from current block
+        jb = JsonBlock(tnode)
+        blockchain = [jb] + blockchain
+        currNode = currNode.prevBlock
+        return blockchain
 
 
 # Helper function for test code for serializing list
@@ -78,12 +105,32 @@ def serialize_list(l, term):
     return ''.join(s)
 
 
+# Creates a JSON file for a block
+# input(s): a TreeNode (which contains a block)
+# output(s): a JSON representation of a block (from a TreeNode)
+def JsonBlock(tnode):
+    jsonBlock = {}
+    # load json into dict
+    data = json.loads(tnode.block.tx.jsonify())
+    jsonBlock["tx"] = data
+
+    # create hash of previous block
+    prevBlock = tnode.block.prev
+    prevBlockSerial = serialize_block(prevBlock)
+    prevBlockEncode = prevBlockSerial.encode('utf-8')
+    prevBlockHash = H(prevBlockEncode)
+    jsonBlock["prev"] = prevBlockHash.hexdigest()
+    jsonBlock["nonce"] = str(tnode.block.nonce)
+    jsonBlock["pow"] = str(tnode.block.pow)
+    return json.dumps(jsonBlock)
+
+
 class Output:
     def __init__(self, value, pubkey):
         self.value = value
         self.pubkey = pubkey
 
-    def compare(obj2):
+    def compare(self, obj2):
         if self.value == obj2.value:
             if self.pubkey == obj2.pubkey:
                 return 1
@@ -94,7 +141,7 @@ class Output:
 class Input:
     def __init__(self, number, output):
         self.number = number
-        self.output:Output = output  #each input holds 1 output
+        self.output:Output = output  # each input holds 1 output
 
 
 class Transaction:
@@ -203,13 +250,12 @@ class Node:
     def verify_not_used(self, local_tx:Transaction, treenode:TreeNode):
         print("==== verify not used ====")
         y = treenode
-        while(y != None):
-            print("local_tx.number = {}".format(local_tx.number))
-            print("y.block.tx.number = {}".format(y.block.tx.number))
+        while(y is not None):
             if local_tx.number == y.block.tx.number:
                 return 0
             else:
                 y = y.prevBlock
+                
         return 1
 
     # Output exists in named transaction - this function checks for/matches numbers and output to an earlier tx
@@ -217,37 +263,41 @@ class Node:
         flag = 1
         flag2 = 1
         for x in local_tx.input:
-            y = current_max_height_tree_node
-            flag2+=1
+            y = self.current_max_height_tree_node
+            flag2 += 1
             while(flag < flag2):
                 if x.number == y.block.tx.number:
                     for z in y.block.tx.output:
                         if z.compare(x.output):
-                            flag+=1
-                elif y != None:
+                            flag += 1
+                elif y.prevBlock is not None:
                     y = y.prevBlock
                 else:
-                    return max(flag - len(tx.input),0)
+                    break
         return max(flag - len(local_tx.input), 0)
+
     # Checks public key for all inputs, checks signature
     def verify_public_key_signatures(self, tx:Transaction):
-        #check same public key
-        pubkey1 = tx.input(1).output.pubkey
+        # check same public key
+        pubkey1 = tx.input[0].output.pubkey
         for x in tx.input:
             if x.output.pubkey != pubkey1:
                 return 0
-        #serializes content and verifies signature to key
+        # serializes content and verifies signature to key
         message = serialize_list(tx.input, "input")
         message += serialize_list(tx.output, "output")
-        verify_key = nacl.signing.VerifyKey(verify_key_hex, encoder=nacl.encoding.HexEncoder)
-        return verify_key.verify(message)
+        message = message.encode("utf-8")
+        verify_key = nacl.signing.VerifyKey(pubkey1, encoder=nacl.encoding.HexEncoder)
+        return verify_key.verify(message, tx.sig.signature)
 
     # ? Not sure if this logic is right
     def verify_double_spend(self, tx:Transaction):
+        if (self.current_max_height_tree_node == self.root):
+            return 1
         flag = 1
         flag2 = 1
         for x in tx.input:
-            y = current_max_height_tree_node
+            y = self.current_max_height_tree_node
             flag2+=1
             while(flag < flag2):
                 for z in y.block.tx.input:
@@ -257,7 +307,7 @@ class Node:
                         y = y.prevBlock
                     else:
                         return max(flag - len(tx.input),0)
-        return max(flag - len(tx.input),0)
+        return max(flag - len(tx.input), 0)
 
     # Checks sum of inputs vs outputs
     def verify_sum(self, tx:Transaction):
@@ -273,11 +323,25 @@ class Node:
         print("verifying!")
         flag = tx.verify_number_hash()
         flag *= self.verify_not_used(tx, treenode)
-        flag *= verify_tx_inputs(tx)
-        flag *= verify_public_key_signatures(tx)
-        flag *= verify_double_spend(tx)
-        flag *= verify_sum(tx)
+        flag *= self.verify_tx_inputs(tx)
+        flag *= self.verify_public_key_signatures(tx)
+        flag *= self.verify_double_spend(tx)
+        flag *= self.verify_sum(tx)
         return bool(flag)
+    
+    def verify_pow(self, block:Block):
+        #Check that PoW is below target
+        return (block.pow < 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+
+    def verify_prev_hash(self, block:Block):
+        #Check that PoW generated from hashing block with appropriate nonce
+        block_serialized = serialize_block(block)
+        block_encoded = prev_serialized.encode('utf-8')
+        prevhash = H(block_encoded).hexdigest()
+        return (block.prev == prevhash)
+
+    def verify_tx_in_block(self, block:Block, treenode:TreeNode):
+        return self.verify(block.tx, treenode)
 
     def update_longest_chain(new_block_tree_node):
         if (new_block_tree_node.height > self.current_max_height_tree_node.height):
@@ -287,6 +351,7 @@ class Node:
         proofow = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF + 1
         target = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
         nonce = 0
+        print("mine block")
         while (proofow > target):
             nonce += 1
             prev_serialized = serialize_block(prev)
@@ -303,9 +368,6 @@ class Node:
         self.treenode_list.append(new_treenode)
         self.update_longest_chain(new_treenode)
         self.send_block(new_block)
-
-
-
 
     def send_block(new_block):
         #for x in node_list:
@@ -333,9 +395,10 @@ class Node:
                 print("new_tx = {}".format(new_tx))
                 if self.verify(new_tx, self.current_max_height_tree_node) == True:
                     print("verified")
-                    self.mine_block(new_tx, current_max_height_tree_node.block)
+                    self.mine_block(new_tx, self.current_max_height_tree_node.block)
 
-            if(global_tx_pool.empty()):
+            print("len global tx pool")
+            if(len(global_tx_pool) == 0):
                 return
 
 
