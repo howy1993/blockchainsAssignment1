@@ -75,7 +75,7 @@ class Input:
 class Transaction:
     def __init__(self, inputs, outputs, sig):
         self.input = inputs
-        self.outputs = outputs
+        self.output = outputs
         self.sig = sig
         self.number = 0
 
@@ -154,7 +154,7 @@ class Node:
             flag2+=1
             while(flag < flag2):
                 if x.number == y.block.tx.number:
-                    for z in y.block.tx.outputs:
+                    for z in y.block.tx.output:
                         if z.compare(x.output):
                             flag+=1
                 elif y != None:
@@ -171,7 +171,7 @@ class Node:
                 return 0
         #serializes content and verifies signature to key
         message = serialize(tx.input, "input")
-        message += serialize(tx.outputs, "output")
+        message += serialize(tx.output, "output")
         verify_key = nacl.signing.VerifyKey(verify_key_hex, encoder=nacl.encoding.HexEncoder)
         return verify(message, tx.sig, encoder=nacl.encoding.HexEncoder)
 
@@ -196,9 +196,9 @@ class Node:
     def verify_sum(tx:Transaction):
         input_sum = 0
         output_sum = 0
-        for x in tx.inputs:
+        for x in tx.input:
             input_sum += x.output.value
-        for y in tx.outputs:
+        for y in tx.output:
             output_sum += y.value
         return (x == y)
 
