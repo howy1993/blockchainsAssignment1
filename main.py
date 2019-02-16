@@ -55,6 +55,21 @@ def serialize_block(tx, prev, nonce):
 
     return joinedSerials
 
+# Helper function for test code for serializing list
+# input(s): list, term
+# output(s): serialized list
+def serialize_list(l, term):
+    s = []
+    for ele in l:
+        if term == "input":
+            s.append(str(ele["number"]))
+            s.append(ele["output"])
+        elif term == "output":
+            s.append(str(ele["value"]))
+            s.append(ele["pubkey]")
+    return ''.join(s)
+
+
 class Output:
     def __init__(self, value, pubkey):
         self.value = value
