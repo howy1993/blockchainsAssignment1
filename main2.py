@@ -263,7 +263,7 @@ class Node:
             input_sum += x.output.value
         for y in tx.output:
             output_sum += y.value
-        return (x == y)
+        return (input_sum == output_sum)
 
     def update_longest_chain(new_block_tree_node):
         if (new_block_tree_node.height > self.current_max_height_tree_node.height):
@@ -424,7 +424,7 @@ def mining(node:Node):
             new_tx = global_tx_pool[0]
             del global_tx_pool[0]
             if verify(node, new_tx, node.current_max_height_tree_node):
-                print()
+                print("verify is: ", verify(node, new_tx, node.current_max_height_tree_node))
                 node.mine_block(new_tx, node.current_max_height_tree_node.block)
             #node.send_block(new_block)
             #lock = 0
@@ -442,7 +442,9 @@ for i in range(0,3):
     tempsig.append(signing_key[i].sign(message))
 
 for x in range (0,3):
-    global_tx_pool.append(Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], tempsig[i]))
+    temptx = Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], tempsig[i])
+    temptx.gen_number()
+    global_tx_pool.append(temptx)
 
 
 
