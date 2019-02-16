@@ -73,6 +73,22 @@ def serialize_block(b):
     s.append(str(b.pow))
     return ''.join(s)
 
+# Helper function for test code for serializing list
+# input(s): list, term
+# output(s): serialized list
+def serialize_list(l, term):
+
+    s = []
+    for ele in l:
+        if term == "input":
+            s.append(str(ele.number))
+            s.append(str(ele.output.value))
+            s.append(str(ele.output.pubkey))
+        elif term == "output":
+            s.append(str(ele.value))
+            s.append(str(ele.pubkey))
+    return ''.join(s)
+
 # Creates a block list in JSON
 # inputs(s): treenode block with highest height
 # output(s): list of JSON blocks
@@ -87,7 +103,6 @@ def blocklist(tnode):
         blockchain = [jb] + blockchain
         currNode = currNode.prevBlock
         return blockchain
-
 
 class Output:
     def __init__(self, value, pubkey):
@@ -247,7 +262,7 @@ class Node:
         return verify_key.verify(message, tx.sig.signature)
 
 
-    # ? Not sure if this logic is right
+    # Not sure if this logic is right
     def verify_double_spend(self, tx:Transaction):
         if (self.current_max_height_tree_node == self.root):
             return 1
@@ -265,8 +280,6 @@ class Node:
                     else:
                         return max(flag - len(tx.input),0)
                 #time.sleep(1)
-
-
         return max(flag - len(tx.input),0)
 
     # Checks sum of inputs vs outputs
@@ -315,7 +328,7 @@ class Node:
         self.send_block(new_block)
 
     def verify(self, tx:Transaction, treenode:TreeNode):
-        flag = NewType('flag', int)
+        #return (tx.verify_number_hash() == self.verify_not_used(tx,treenode) ==
         flag = tx.verify_number_hash()
         flag *= self.verify_not_used(tx, treenode)
         flag *= self.verify_tx_inputs(tx)
@@ -361,21 +374,6 @@ class Node:
             if(len(global_tx_pool)==0):
                 return
 
-# Helper function for test code for serializing list
-# input(s): list, term
-# output(s): serialized list
-def serialize_list(l, term):
-
-    s = []
-    for ele in l:
-        if term == "input":
-            s.append(str(ele.number))
-            s.append(str(ele.output.value))
-            s.append(str(ele.output.pubkey))
-        elif term == "output":
-            s.append(str(ele.value))
-            s.append(str(ele.pubkey))
-    return ''.join(s)
 
 # Creates a JSON file for a block
 # input(s): a TreeNode (which contains a block)
