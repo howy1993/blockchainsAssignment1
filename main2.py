@@ -6,10 +6,8 @@ import time
 from hashlib import sha256 as H
 from typing import NewType
 
-print('')
-print('')
 # Serializes a list of JSON objects from a specific transaction
-# input(s): json object, term (input or output)
+# input(s): json object, term ("input" or "output")
 # output(s): a serialization of the list of inputs or outputs
 def serialize(tx, term):
     # load the json data
@@ -49,18 +47,30 @@ def generate_number(tx):
 # Serializes transaction, previous hash, and nonce value
 # input(s): transaction
 # output(s):
-def serialize_block(tx, prev, nonce):
+def serialize_pre_block(tx, prev, nonce):
 
     # serialize specifically for a transaction
     serials = []
     for t in ["number", "input", "output", "sig"]:
-        res = serialize(tx, t)
+        res = serialize(tx.jsonify(), t)
         serials.append(res)
     serials.append(prev)
     serials.append(str(nonce))
     joinedSerials = "".join(serials)
 
     return joinedSerials
+
+# creates a serialization of a Block object
+# input(s): b which is a Block object
+# output(s): string serialization of the Block attributes
+def serialize_block(b):
+    s = []
+    s.append(b.tx.serialize_self())
+    s.append(str(b.prev))
+    s.append(str(b.nonce))
+    s.append(str(b.pow))
+    return ''.join(s)
+
 
 # Helper function for test code for serializing list
 # input(s): list, term
@@ -103,6 +113,14 @@ class Transaction:
         self.output = outputs
         self.sig = sig
         self.number = 0
+
+    def serialize_self(self):
+        s = []
+        s.append(serialize(self.jsonify(), "input"))
+        s.append(serialize(self.jsonify(), "output"))
+        s.append(str(self.sig))
+        s.append(str(self.number))
+        return ''.join(s)
 
     def gen_number(self):
         j = self.jsonify()
@@ -167,7 +185,7 @@ class Block:
         jsonObj["prev"] = self.prev
         jsonObj["nonce"] = self.nonce
         jsonObj["pow"] = self.proofow
-        return json.dumps(jsonObj)
+        return json.dumps(jsonObj, indent=4)
 
 # Self-made tree/node structure that stores height
 class TreeNode:
@@ -200,17 +218,21 @@ class Node:
         flag = 1
         flag2 = 1
         for x in local_tx.input:
+            #print("treenode type is:", type(self.current_max_height_tree_node.block.tx.input))
             y = self.current_max_height_tree_node
             flag2+=1
             while(flag < flag2):
+                #print("y is:", y)
                 if x.number == y.block.tx.number:
                     for z in y.block.tx.output:
                         if z.compare(x.output):
+                            #print("compare passes")
+                            #print("global_tx_pool len: ", len(global_tx_pool))
                             flag+=1
-                elif y != None:
+                elif y.prevBlock != None:
                     y = y.prevBlock
                 else:
-                    return max(flag - len(tx.input),0)
+                    return max(flag - len(local_tx.input),0)
         return max(flag - len(local_tx.input), 0)
     # Checks public key for all inputs, checks signature
     def verify_public_key_signatures(self, tx:Transaction):
@@ -238,19 +260,19 @@ class Node:
             y = self.current_max_height_tree_node
             flag2+=1
             while(flag < flag2):
-                print(flag)
-                print(len(y.block.tx.input))
+                #print(flag)
+                #print(len(y.block.tx.input))
                 for z in y.block.tx.input:
                     if x.number == z.number:
-                        print("it came here")
+                    #    print("it came here")
                         flag+=1
                     elif y != None:
-                        print("it came here tho")
+                    #    print("it came here tho")
                         y = y.prevBlock
                     else:
-                        print("it came here last")
+                    #    print("it came here last")
                         return max(flag - len(tx.input),0)
-                time.sleep(1)
+                #time.sleep(1)
 
 
         return max(flag - len(tx.input),0)
@@ -265,25 +287,11 @@ class Node:
             output_sum += y.value
         return (input_sum == output_sum)
 
-    def update_longest_chain(new_block_tree_node):
+    def update_longest_chain(self, new_block_tree_node):
         if (new_block_tree_node.height > self.current_max_height_tree_node.height):
                 self.current_max_height_tree_node = new_block_tree_node
 
-    def mine_block(tx:Transaction, prev:Block):
-        proofow = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF + hex(1)
-        nonce = 0
-        while (proofow > 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF):
-            nonce += 1
-            block_message = serialize_block(tx.number, prev, nonce)
-            proofow = H(block_message.encode('utf-8'))
-        #Once verified, push nonce/pow/prev into a new block and send it out
-        new_block = Block(tx, prev, nonce, proofow)
-        new_treenode = TreeNode(new_block, prev, prevBlock.height+1)
-        treenode_list.append(new_treenode)
-        update_longest_chain(new_block_tree_node)
-        sendBlock(new_block)
-
-    def send_block(new_block):
+    def send_block(self, new_block):
         #for x in node_list:
         #    x.q
         return 1
@@ -292,6 +300,34 @@ class Node:
         #TODO: validate block?
         #update_longest_chain(new_block)
         return 1
+
+    def mine_block(self, tx:Transaction, prev:Block):
+        proofow = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF + 1
+        target = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+        nonce = 0
+        while (proofow > target):
+            nonce += 1
+            #print("tx.number is ", tx.number)
+            #print("tx is a", type(tx))
+            #print("nonce is", nonce)
+            prev_serialized = serialize_block(prev)
+            prev_encoded = prev_serialized.encode('utf-8')
+            prevhash = H(prev_encoded).hexdigest()
+            block_message = serialize_pre_block(tx, prevhash, nonce)
+            proofow = H(block_message.encode('utf-8'))
+            proofow = proofow.digest()
+            target = b'target'
+
+
+        #print(proofow)
+        #Once verified, push nonce/pow/prev into a new block and send it out
+        new_block = Block(tx, prev, nonce, proofow)
+        new_treenode = TreeNode(new_block, self.current_max_height_tree_node, self.current_max_height_tree_node.height+1)
+        self.treenode_list.append(new_treenode)
+        self.update_longest_chain(new_treenode)
+        self.send_block(new_block)
+
+
 
 def main():
     jObj = json.dumps([
@@ -392,11 +428,13 @@ lock = 0
 inputs_from_gen_tx = []
 outputs_from_gen_tx = []
 
-for i in range (0, 3):
+for i in range (0, 15):
     new1 = []
     new2 = []
-    new1.append(Input(gen_transaction_number, Output(100, verify_key_hex[i])))
-    new2.append(Output(100, verify_key_hex[i+3]))
+    j = i % 8
+    new1.append(Input(gen_transaction_number, Output(100, verify_key_hex[j])))
+    k = (i + 3) % 8
+    new2.append(Output(100, verify_key_hex[k]))
     inputs_from_gen_tx.append(new1)
     outputs_from_gen_tx.append(new2)
 
@@ -408,17 +446,18 @@ def verify(node:Node, tx:Transaction, treenode:TreeNode):
     flag *= node.verify_public_key_signatures(tx)
     flag *= node.verify_double_spend(tx)
     flag *= node.verify_sum(tx)
+    if flag == 1:
+        print("verify passes")
+    else:
+        print("verify fails")
     return bool(flag)
 
 def mining(node:Node):
-
     while(True): #global variable
         #sleep(random)
         print(len(global_tx_pool))
-
         if (not node.q.empty()):
             new_block = node.q.get()
-
         if((len(global_tx_pool)!=0)):
             #lock = 1
             new_tx = global_tx_pool[0]
@@ -428,27 +467,69 @@ def mining(node:Node):
                 node.mine_block(new_tx, node.current_max_height_tree_node.block)
             #node.send_block(new_block)
             #lock = 0
-
         if(len(global_tx_pool)==0):
             return
 
+# Creates a JSON file for a block
+# input(s): a TreeNode (which contains a block)
+# output(s): a JSON representation of a block (from a TreeNode)
+def JsonBlock(tnode:TreeNode):
+    jsonBlock = {}
+    # load json into dict
+    data = json.loads(tnode.block.tx.jsonify())
+    jsonBlock["tx"] = data
+
+    # create hash of previous block
+    prevBlock = tnode.block.prev
+    prevBlockSerial = serialize_block(prevBlock)
+    prevBlockEncode = prevBlockSerial.encode('utf-8')
+    prevBlockHash = H(prevBlockEncode)
+    jsonBlock["prev"] = prevBlockHash.hexdigest()
+    jsonBlock["nonce"] = str(tnode.block.nonce)
+    jsonBlock["pow"] = str(tnode.block.pow)
+
+    return json.dumps(jsonBlock)
+
+
+
+
+
+# Creates a block list in JSON
+# inputs(s): treenode block with highest height
+# output(s): list of JSON blocks
+def blocklist(tnode):
+    currNode = tnode
+    blockchain = []
+
+    # with given block with highest height, iterate backwards to genesis
+    while (currNode.prevBlock != None):
+        # create JSON from current block
+        jb = JsonBlock(tnode)
+
+        blockchain = [jb] + blockchain
+        currNode = currNode.prevBlock
+    print("====================================================")
+    print(blockchain)
+    return blockchain
 
 tempsig = []
 
-for i in range(0,3):
+for i in range(0,15):
     message = serialize_list(inputs_from_gen_tx[i], "input")
     message += serialize_list(outputs_from_gen_tx[i], "output")
     message = message.encode("utf-8")
-    tempsig.append(signing_key[i].sign(message))
+    j = i%8
+    tempsig.append(signing_key[j].sign(message))
 
-for x in range (0,3):
+for i in range (0,15):
     temptx = Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], tempsig[i])
     temptx.gen_number()
     global_tx_pool.append(temptx)
 
 
-
 mining(node_list[1])
+blocklist(node_list[1].current_max_height_tree_node)
+
 
 
 if __name__ == "__main__":
