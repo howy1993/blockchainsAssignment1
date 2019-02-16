@@ -307,8 +307,6 @@ class Node:
             proofow = proofow.digest()
             target = b'target'
 
-
-        #print(proofow)
         #Once verified, push nonce/pow/prev into a new block and send it out
         new_block = Block(tx, prev, nonce, proofow)
         new_treenode = TreeNode(new_block, self.current_max_height_tree_node, self.current_max_height_tree_node.height+1)
@@ -329,6 +327,22 @@ class Node:
         else:
             print("verify fails")"""
         return bool(flag)
+
+    def verify_pow(self, block:Block):
+        #Check that PoW is below target
+        flag = (block.pow < 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+
+
+    def verify_prev_hash(self, block:Block):
+        #Check that PoW generated from hashing block with appropriate nonce
+        block_serialized = serialize_block(block)
+        block_encoded = prev_serialized.encode('utf-8')
+        prevhash = H(block_encoded).hexdigest()
+        return (block.prev == prevhash)
+
+
+    def verify_tx_in_block(self, block:Block, treenode:TreeNode):
+        return self.verify(block.tx, treenode)
 
 
     def mining(self, global_tx_pool):
