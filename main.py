@@ -10,7 +10,6 @@ from hashlib import sha256 as H
 def serialize(tx, term):
     # load the json data
     data = json.loads(tx)
-    print("======== serialize")
     s = []
     for t in data[term]:
         if term == "input":
@@ -103,10 +102,7 @@ class Transaction:
 
     def gen_number(self):
         j = self.jsonify()
-        print("j = {}".format(j))
         number = generate_number(j)
-        print("number = {}".format(number))
-        print("number digest = {}".format(number.hexdigest()))
         self.number = number.hexdigest()
 
     def verify_number_hash(self):
@@ -280,25 +276,30 @@ class Node:
         #    x.q
         return 1
 
-    def receive_block():
+    def receive_block(self):
         #TODO: validate block?
         #update_longest_chain(new_block)
         return 1
 
-    def mining():
-        while(not no_more_tx): #global variable
+    def mining(self):
+        print("does it come here?")
+        while(): #global variable
             #sleep(random)
-
+            print("looping")
             if (not q.empty()):
                 new_block = q.get()
 
             if(not global_tx_pool.empty() and lock == 0):
                 lock = 1
+                print(len(lobal_tx_pool))
                 new_tx = q.get()
                 if verify(new_tx):
                     mine_block(new_tx, current_max_height_tree_node.block)
                 send_block(new_block)
                 lock = 0
+
+            if(global_tx_pool.empty()):
+                return
 
 def main():
     jObj = json.dumps([
@@ -372,25 +373,16 @@ for i in range (0,8):
     output_list.append(Output(100, verify_key_hex[i]))
 
 
-print("starting prints")
 empty_input_list = []
 gen_transaction = Transaction(empty_input_list, output_list, 0)
-print("gen transaction obj = {}".format(gen_transaction))
 
 j = gen_transaction.jsonify()
-print("j = {}".format(j))
 
 
 
 # generate the number for the transaction
 gen_transaction.gen_number()
-
 gen_transaction_number = gen_transaction.number
-print("gen_transaction number = {}".format(gen_transaction.number))
-
-
-print("==========")
-
 
 # Generate genesis block
 gen_block = Block(gen_transaction, b'0', None, b'0')
@@ -408,21 +400,23 @@ no_more_tx = 1
 lock = 0
 inputs_from_gen_tx = []
 outputs_from_gen_tx = []
-print(gen_transaction_number)
 
 for i in range (0,3):
-    print(i)
-    print(verify_key_hex[i+3])
     inputs_from_gen_tx.append(Input(gen_transaction_number, Output(100, verify_key_hex[i])))
     outputs_from_gen_tx.append(Output(100, verify_key_hex[i+3]))
 
 message = serialize_list(inputs_from_gen_tx, "input")
 message += serialize_list(outputs_from_gen_tx, "output")
-print(message)
 message = message.encode("utf-8")
-print(message)
 sig = signing_key[i].sign(message)
-global_tx_pool.append(Transaction(inputs_from_gen_tx, outputs_from_gen_tx, sig))
+for x in range (0,3):
+    global_tx_pool.append(Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], sig))
+
+print(type(node_list[1]))
+print(type(global_tx_pool[1]))
+node_list[1].mining
+print(node_list[1].current_max_height_tree_node.height)
+
 
 
 if __name__ == "__main__":
