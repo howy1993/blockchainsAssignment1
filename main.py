@@ -1,6 +1,7 @@
 import json
 import nacl.encoding
 import nacl.signing
+import queue
 from hashlib import sha256 as H
 
 # Serializes a list of JSON objects from a specific transaction
@@ -19,6 +20,9 @@ def serialize(tx, term):
 
     return ''.join(s)
 
+# Generates a transaction number from a given transaction JSON object
+# input(s): a transaction JSON object
+# output(s): a serialization of the JSON elements into a number
 def generate_number(tx):
     serials = []
     # serialize each transaction (each input and output)
@@ -77,6 +81,7 @@ class Transaction:
 
     def gen_number():
         number = generate_number(self)
+        return number
 
     def verify_number_hash():
         temp = generate_number(self)
@@ -105,15 +110,15 @@ class TreeNode:
 class Node:
     def __init__(self, gen_block:Block):
         self.root = TreeNode(gen_block, None, 1)
-        self.tx_list = []
         self.treenode_list = []
         self.treenode_list.append(self.root)
         self.node_list = []
-        self.currentMaxHeightTreeNode = self.root
+        self.current_max_height_tree_node = self.root
+        self.q = queue.Queue()
 
     # Checks that tx number is has not been used in any prevBlocks
     def verify_not_used(local_tx:Transaction):
-        y = currentMaxHeightTreeNode
+        y = current_max_height_tree_node
         while(y != None):
             if local_tx.number == y.block.tx.number:
                 return 0
@@ -126,7 +131,7 @@ class Node:
         flag = 1
         flag2 = 1
         for x in local_tx.input:
-            y = currentMaxHeightTreeNode
+            y = current_max_height_tree_node
             flag2+=1
             while(flag < flag2):
                 if x.number == y.block.tx.number:
@@ -138,7 +143,6 @@ class Node:
                 else:
                     return max(flag - len(tx.input),0)
         return max(flag - len(local_tx.input), 0)
-
     # Checks public key for all inputs, checks signature
     def verify_public_key_signatures(tx:Transaction):
         #check same public key
@@ -157,7 +161,7 @@ class Node:
         flag = 1
         flag2 = 1
         for x in tx.input:
-            y = currentMaxHeightTreeNode
+            y = current_max_height_tree_node
             flag2+=1
             while(flag < flag2):
                 for z in y.block.tx.input:
@@ -188,7 +192,11 @@ class Node:
         flag *= verify_sum(tx)
         return bool(flag)
 
-    def mineBlock(tx:Transaction, prev:Block):
+    def update_longest_chain(new_block_tree_node):
+        if (new_block_tree_node.height > self.current_max_height_tree_node.height):
+                self.current_max_height_tree_node = new_block_tree_node
+
+    def mine_block(tx:Transaction, prev:Block):
         pow = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF + hex(1)
         nonce = 0
         while (pow > 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF):
@@ -197,21 +205,35 @@ class Node:
             pow = H(block_message.encode('utf-8'))
         #Once verified, push nonce/pow/prev into a new block and send it out
         new_block = Block(tx, prev, nonce, pow)
-        treenode_list.append(TreeNode(new_block, prev, prevBlock.height+1))
+        new_treenode = TreeNode(new_block, prev, prevBlock.height+1)
+        treenode_list.append(new_treenode)
+        update_longest_chain(new_block_tree_node)
         sendBlock(new_block)
-        for x in tx.outputs:
-            self.tx_list.append(x)
-        #TODO: update what the longest chain is
 
-    def sendBlock():
-        self.sendBlock = new_block
-        #TODO: sending block over threads
-
-    def receiveBlock():
-        #TODO: validate block?
-        #TODO: update longest chain
+    def send_block(new_block):
+        #for x in node_list:
+        #    x.q
         return 1
 
+    def receive_block():
+        #TODO: validate block?
+        #update_longest_chain(new_block)
+        return 1
+
+    def mining():
+        while(not no_more_tx): #global variable
+            #sleep(random)
+
+            if (not q.empty()):
+                new_block = q.get()
+
+            if(not global_tx_pool.empty() and lock == 0):
+                lock = 1
+                new_tx = q.get()
+                if verify(new_tx):
+                    mine_block(new_tx, current_max_height_tree_node.block)
+                send_block(new_block)
+                lock = 0
 
 def main():
     jObj = json.dumps([
@@ -310,10 +332,10 @@ for i in range (0,8):
 
 empty_input_list = []
 gen_transaction = Transaction(empty_input_list, output_list[i], 0)
-gen_transaction.gen_number
+gen_transaction_number = gen_transaction.gen_number()
 
 # Generate genesis block
-gen_block = Block(gen_transaction, b'0', b'0', b'0')
+gen_block = Block(gen_transaction, b'0', None, b'0')
 
 #Initialize nodes with genesis block
 node_list = []
@@ -322,6 +344,23 @@ for i in range (0,10):
 
 for i in range (0,10):
     node_list[i-1].node_list = node_list
+
+global_tx_pool = []
+no_more_tx = 1
+lock = 0
+inputs_from_gen_tx = []
+outputs_from_gen_tx = []
+
+for i in (0,3):
+    inputs_from_gen_tx.append(Input(gen_transaction_number, Output(100, verify_key_hex[i])))
+    outputs_from_gen_tx.append(new_output = Output(100, verify_key_hex[i+3]))
+    message = serialize(inputs_from_gen_tx, "input")
+    message += serialize(outputs_from_gen_tx, "output")
+    println(message)
+    message = message.encode("utf-8")
+    println(message)
+    sig = signing_key[i].sign(message)
+    global_tx_pool.append(Transaction(inputs_from_gen_tx, outputs_from_gen_tx, sig))
 
 
 if __name__ == "__main__":
