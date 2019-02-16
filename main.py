@@ -87,6 +87,17 @@ class Transaction:
         temp = generate_number(self)
         return (temp == self.number)
 
+
+    def jsonify():
+        jsonObj = {}
+        jsonObj["input"] = self.input
+        jsonObj["output"] = self.output
+        jsonObj["sig"] = self.sig
+        jsonObj["number"] = self.number
+        return json.dumps(jsonObj)
+
+
+
 # block
 # {"tx": <a single transaction>,
 #  "prev": <hash of the previous block>,
@@ -94,11 +105,19 @@ class Transaction:
 #  "pow": <the proof-of-work, a hash of the tx, prev, and nonce fields>
 # }
 class Block:
-    def __init__(self, tx:Transaction, prev, nonce, pow):
+    def __init__(self, tx:Transaction, prev, nonce, proofow):
         self.tx = tx
         self.prev = prev
         self.nonce = nonce
-        self.pow = pow
+        self.pow = proofow
+
+    def jsonify():
+        jsonObj = {}
+        jsonObj["tx"] = self.tx
+        jsonObj["prev"] = self.prev
+        jsonObj["nonce"] = self.nonce
+        jsonObj["pow"] = self.proofow
+        return json.dumps(jsonObj)
 
 # Self-made tree/node structure that stores height
 class TreeNode:
@@ -197,14 +216,14 @@ class Node:
                 self.current_max_height_tree_node = new_block_tree_node
 
     def mine_block(tx:Transaction, prev:Block):
-        pow = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF + hex(1)
+        proofow = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF + hex(1)
         nonce = 0
-        while (pow > 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF):
+        while (proofow > 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF):
             nonce += 1
             block_message = serialize_block(tx.number, prev, nonce)
-            pow = H(block_message.encode('utf-8'))
+            proofow = H(block_message.encode('utf-8'))
         #Once verified, push nonce/pow/prev into a new block and send it out
-        new_block = Block(tx, prev, nonce, pow)
+        new_block = Block(tx, prev, nonce, proofow)
         new_treenode = TreeNode(new_block, prev, prevBlock.height+1)
         treenode_list.append(new_treenode)
         update_longest_chain(new_block_tree_node)
