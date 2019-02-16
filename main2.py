@@ -44,6 +44,7 @@ def generate_number(tx):
 
     return hashedSerials
 
+
 # Serializes transaction, previous hash, and nonce value
 # input(s): transaction
 # output(s):
@@ -60,6 +61,7 @@ def serialize_pre_block(tx, prev, nonce):
 
     return joinedSerials
 
+
 # creates a serialization of a Block object
 # input(s): b which is a Block object
 # output(s): string serialization of the Block attributes
@@ -71,22 +73,20 @@ def serialize_block(b):
     s.append(str(b.pow))
     return ''.join(s)
 
+# Creates a block list in JSON
+# inputs(s): treenode block with highest height
+# output(s): list of JSON blocks
+def blocklist(tnode):
+    currNode = tnode
+    blockchain = []
 
-# Helper function for test code for serializing list
-# input(s): list, term
-# output(s): serialized list
-def serialize_list(l, term):
-
-    s = []
-    for ele in l:
-        if term == "input":
-            s.append(str(ele.number))
-            s.append(str(ele.output.value))
-            s.append(str(ele.output.pubkey))
-        elif term == "output":
-            s.append(str(ele.value))
-            s.append(str(ele.pubkey))
-    return ''.join(s)
+    # with given block with highest height, iterate backwards to genesis
+    while (currNode.prevBlock != None):
+        # create JSON from current block
+        jb = JsonBlock(tnode)
+        blockchain = [jb] + blockchain
+        currNode = currNode.prevBlock
+        return blockchain
 
 
 class Output:
@@ -106,6 +106,7 @@ class Input:
     def __init__(self, number, output):
         self.number = number
         self.output:Output = output #each input holds 1 output
+
 
 class Transaction:
     def __init__(self, inputs, outputs, sig):
@@ -218,26 +219,22 @@ class Node:
         flag = 1
         flag2 = 1
         for x in local_tx.input:
-            #print("treenode type is:", type(self.current_max_height_tree_node.block.tx.input))
             y = self.current_max_height_tree_node
             flag2+=1
             while(flag < flag2):
-                #print("y is:", y)
                 if x.number == y.block.tx.number:
                     for z in y.block.tx.output:
                         if z.compare(x.output):
-                            #print("compare passes")
-                            #print("global_tx_pool len: ", len(global_tx_pool))
                             flag+=1
                 elif y.prevBlock != None:
                     y = y.prevBlock
                 else:
                     return max(flag - len(local_tx.input),0)
         return max(flag - len(local_tx.input), 0)
+
     # Checks public key for all inputs, checks signature
     def verify_public_key_signatures(self, tx:Transaction):
         #check same public key
-        return 1
         pubkey1 = tx.input[0].output.pubkey
         for x in tx.input:
             if x.output.pubkey != pubkey1:
@@ -247,7 +244,7 @@ class Node:
         message += serialize_list(tx.output, "output")
         message = message.encode("utf-8")
         verify_key = nacl.signing.VerifyKey(pubkey1, encoder=nacl.encoding.HexEncoder)
-        return verify_key.verify(message, tx.sig)
+        return verify_key.verify(message, tx.sig.signature)
 
 
     # ? Not sure if this logic is right
@@ -260,17 +257,12 @@ class Node:
             y = self.current_max_height_tree_node
             flag2+=1
             while(flag < flag2):
-                #print(flag)
-                #print(len(y.block.tx.input))
                 for z in y.block.tx.input:
                     if x.number == z.number:
-                    #    print("it came here")
                         flag+=1
                     elif y != None:
-                    #    print("it came here tho")
                         y = y.prevBlock
                     else:
-                    #    print("it came here last")
                         return max(flag - len(tx.input),0)
                 #time.sleep(1)
 
@@ -307,9 +299,6 @@ class Node:
         nonce = 0
         while (proofow > target):
             nonce += 1
-            #print("tx.number is ", tx.number)
-            #print("tx is a", type(tx))
-            #print("nonce is", nonce)
             prev_serialized = serialize_block(prev)
             prev_encoded = prev_serialized.encode('utf-8')
             prevhash = H(prev_encoded).hexdigest()
@@ -327,148 +316,52 @@ class Node:
         self.update_longest_chain(new_treenode)
         self.send_block(new_block)
 
+    def verify(self, tx:Transaction, treenode:TreeNode):
+        flag = NewType('flag', int)
+        flag = tx.verify_number_hash()
+        flag *= self.verify_not_used(tx, treenode)
+        flag *= self.verify_tx_inputs(tx)
+        flag *= self.verify_public_key_signatures(tx)
+        flag *= self.verify_double_spend(tx)
+        flag *= self.verify_sum(tx)
+        """if flag == 1:
+            print("verify passes")
+        else:
+            print("verify fails")"""
+        return bool(flag)
 
 
-def main():
-    jObj = json.dumps([
-        {
-            "number": "fc12f4bc8657dd0139a978cd1bd64b94e5b780dc61f292830626ead7f830c221",
-            "input": [
-                {
-                    "number": "1234",
-                    "output": {
-                        "value": 123,
-                        "pubkey": "asdf"
-                    }
-                },
-                {
-                    "number": "5678",
-                    "output": {
-                        "value": 456,
-                        "pubkey": "fdsa"
-                    }
-                }
-            ],
-            "output": [
-                {
-                    "value": 40.87722055316936,
-                    "pubkey": "f55fcd64b06bae4f5f13ef7c33b0d71c8c2a9a0b446bdd9158e88fb1ec131b2f"
+    def mining(self, global_tx_pool):
+        while(True): #global variable
+            #sleep(random)
+            if (not self.q.empty()):
+                new_block = self.q.get()
+            if((len(global_tx_pool)!=0)):
+                #lock = 1
+                new_tx = global_tx_pool[0]
+                del global_tx_pool[0]
+                if self.verify(new_tx, self.current_max_height_tree_node):
+                    self.mine_block(new_tx, self.current_max_height_tree_node.block)
+                #node.send_block(new_block)
+                #lock = 0
+            if(len(global_tx_pool)==0):
+                return
 
-                 },
-                {
-                    "value": 62.70091885420593,
-                    "pubkey": "f31afc7d3b351ed6627a6fe73e59c56cc85142b6ce75c91a6cb48ada8b18df7f"
-                },
-                {
-                    "value": 61.567598039085006,
-                    "pubkey": "a4358fe73763794164b5cc88605da3a9c877e157f2eef135fa717d9ba6e2f403"
-                },
-                {
-                    "value": 32.036403371644184,
-                    "pubkey": "8ae86a3d0886ed284558f1f1877e56ce7a471bd00db16effc506f10911916bcf"
-                },
-                {
-                    "value": 74.85502582411641,
-                    "pubkey": "807cfae7317ed443aacf114ff26dd9c69bcdc757f6c742d8cc1a2667be4e7ca5"
-                }
-            ],
-            "sig": "ec17086bd4c0a566893a508454f6ed332c360de2d86834e5ffeddeec4ec24da907dc505d595692415a1ade7f7bd9d03cf2e01acbd3335f1eef3b1ecfb9548a06"
-        }])
+# Helper function for test code for serializing list
+# input(s): list, term
+# output(s): serialized list
+def serialize_list(l, term):
 
-
-
-
-##
-## Start of test.
-##
-
-signing_key = []
-verify_key = []
-verify_key_hex = []
-
-# Generate 8 random pksk pairs
-for i in range (0,8):
-    signing_key_new = nacl.signing.SigningKey.generate()
-    verify_key_new = signing_key_new.verify_key
-    verify_key_hex_new = verify_key_new.encode(encoder=nacl.encoding.HexEncoder)
-    signing_key.append(signing_key_new)
-    verify_key.append(verify_key_new)
-    verify_key_hex.append(verify_key_hex_new)
-
-output_list = []
-# Generate contents for gen block. All 8 pksk pairs get 100 coins
-for i in range (0,8):
-    output_list.append(Output(100, verify_key_hex[i]))
-
-
-empty_input_list = []
-gen_transaction = Transaction(empty_input_list, output_list, 0)
-
-j = gen_transaction.jsonify()
-
-
-
-# generate the number for the transaction
-gen_transaction.gen_number()
-gen_transaction_number = gen_transaction.number
-
-# Generate genesis block
-gen_block = Block(gen_transaction, b'0', None, b'0')
-#Initialize nodes with genesis block
-node_list = []
-for i in range(0,10):
-    node_list.append(Node(gen_block))
-
-for i in range(0,10):
-    node_list[i-1].node_list = node_list
-
-global_tx_pool = []
-no_more_tx = 1
-lock = 0
-inputs_from_gen_tx = []
-outputs_from_gen_tx = []
-
-for i in range (0, 15):
-    new1 = []
-    new2 = []
-    j = i % 8
-    new1.append(Input(gen_transaction_number, Output(100, verify_key_hex[j])))
-    k = (i + 3) % 8
-    new2.append(Output(100, verify_key_hex[k]))
-    inputs_from_gen_tx.append(new1)
-    outputs_from_gen_tx.append(new2)
-
-def verify(node:Node, tx:Transaction, treenode:TreeNode):
-    flag = NewType('flag', int)
-    flag = tx.verify_number_hash()
-    flag *= node.verify_not_used(tx, treenode)
-    flag *= node.verify_tx_inputs(tx)
-    flag *= node.verify_public_key_signatures(tx)
-    flag *= node.verify_double_spend(tx)
-    flag *= node.verify_sum(tx)
-    if flag == 1:
-        print("verify passes")
-    else:
-        print("verify fails")
-    return bool(flag)
-
-def mining(node:Node):
-    while(True): #global variable
-        #sleep(random)
-        print(len(global_tx_pool))
-        if (not node.q.empty()):
-            new_block = node.q.get()
-        if((len(global_tx_pool)!=0)):
-            #lock = 1
-            new_tx = global_tx_pool[0]
-            del global_tx_pool[0]
-            if verify(node, new_tx, node.current_max_height_tree_node):
-                print("verify is: ", verify(node, new_tx, node.current_max_height_tree_node))
-                node.mine_block(new_tx, node.current_max_height_tree_node.block)
-            #node.send_block(new_block)
-            #lock = 0
-        if(len(global_tx_pool)==0):
-            return
+    s = []
+    for ele in l:
+        if term == "input":
+            s.append(str(ele.number))
+            s.append(str(ele.output.value))
+            s.append(str(ele.output.pubkey))
+        elif term == "output":
+            s.append(str(ele.value))
+            s.append(str(ele.pubkey))
+    return ''.join(s)
 
 # Creates a JSON file for a block
 # input(s): a TreeNode (which contains a block)
@@ -487,48 +380,83 @@ def JsonBlock(tnode:TreeNode):
     jsonBlock["prev"] = prevBlockHash.hexdigest()
     jsonBlock["nonce"] = str(tnode.block.nonce)
     jsonBlock["pow"] = str(tnode.block.pow)
-
     return json.dumps(jsonBlock)
 
+def main():
+##
+## Start of test.
+##
 
+    signing_key = []
+    verify_key = []
+    verify_key_hex = []
 
+    # Generate 8 random pksk pairs
+    for i in range (0,8):
+        signing_key_new = nacl.signing.SigningKey.generate()
+        verify_key_new = signing_key_new.verify_key
+        verify_key_hex_new = verify_key_new.encode(encoder=nacl.encoding.HexEncoder)
+        signing_key.append(signing_key_new)
+        verify_key.append(verify_key_new)
+        verify_key_hex.append(verify_key_hex_new)
 
+    output_list = []
+    # Generate contents for gen block. All 8 pksk pairs get 100 coins
+    for i in range (0,8):
+        output_list.append(Output(100, verify_key_hex[i]))
+    empty_input_list = []
 
-# Creates a block list in JSON
-# inputs(s): treenode block with highest height
-# output(s): list of JSON blocks
-def blocklist(tnode):
-    currNode = tnode
-    blockchain = []
+    # Generate rubbish signature for gen tx
+    signing_key_gen_tx = nacl.signing.SigningKey.generate()
+    signed = signing_key_gen_tx.sign(b"Attack at Dawn")
+    gen_transaction = Transaction(empty_input_list, output_list, signed)
 
-    # with given block with highest height, iterate backwards to genesis
-    while (currNode.prevBlock != None):
-        # create JSON from current block
-        jb = JsonBlock(tnode)
+    # Generate number for gen transaction
+    gen_transaction.gen_number()
+    gen_transaction_number = gen_transaction.number
 
-        blockchain = [jb] + blockchain
-        currNode = currNode.prevBlock
-    print("====================================================")
-    print(blockchain)
-    return blockchain
+    # Generate genesis block and initialize nodes with it
+    gen_block = Block(gen_transaction, b'0', None, b'0')
+    node_list = []
+    for i in range(0,10):
+        node_list.append(Node(gen_block))
 
-tempsig = []
+    for i in range(0,10):
+        node_list[i-1].node_list = node_list
 
-for i in range(0,15):
-    message = serialize_list(inputs_from_gen_tx[i], "input")
-    message += serialize_list(outputs_from_gen_tx[i], "output")
-    message = message.encode("utf-8")
-    j = i%8
-    tempsig.append(signing_key[j].sign(message))
+    # Generate txs for global_tx_pool
+    global_tx_pool = []
+    no_more_tx = 1
+    lock = 0
+    inputs_from_gen_tx = []
+    outputs_from_gen_tx = []
 
-for i in range (0,15):
-    temptx = Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], tempsig[i])
-    temptx.gen_number()
-    global_tx_pool.append(temptx)
+    for i in range (0, 15):
+        new1 = []
+        new2 = []
+        j = i % 8
+        new1.append(Input(gen_transaction_number, Output(100, verify_key_hex[j])))
+        k = (i + 3) % 8
+        new2.append(Output(100, verify_key_hex[k]))
+        inputs_from_gen_tx.append(new1)
+        outputs_from_gen_tx.append(new2)
 
+    tempsig = []
 
-mining(node_list[1])
-blocklist(node_list[1].current_max_height_tree_node)
+    for i in range(0,15):
+        message = serialize_list(inputs_from_gen_tx[i], "input")
+        message += serialize_list(outputs_from_gen_tx[i], "output")
+        message = message.encode("utf-8")
+        j = i%8
+        tempsig.append(signing_key[j].sign(message))
+
+    for i in range (0,15):
+        temptx = Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], tempsig[i])
+        temptx.gen_number()
+        global_tx_pool.append(temptx)
+
+    node_list[1].mining(global_tx_pool)
+    blocklist(node_list[1].current_max_height_tree_node)
 
 
 
