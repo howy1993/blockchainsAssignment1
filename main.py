@@ -4,9 +4,55 @@ import nacl.signing
 import queue
 from threading import Thread
 import time
+import random
+import sys
 from hashlib import sha256 as H
+
 global_tx_pool = []
+global_tx_pool_driver = []
 node_list = []
+del_list = 0
+doneflag = 2
+
+#############################################
+#       Assignment 1                        #
+#                                           #
+# Authors: Daniel Hwang, Howey Ho           #
+#                                           #
+#############################################
+
+
+# Read in transaction file (JSON) and convert to Transaction objects
+# input(s): JSON file containing transactions
+# output(s): list of transaction objects
+def readInTxFile(f):
+    txList = []
+    with open(f) as transactions:
+        data = json.load(transactions)
+        for tx in data:
+            num = tx["number"]
+            sig = tx["sig"]
+            inputs = tx["input"]
+            outputs = tx["output"]
+            # create Output object
+            outList = []
+            for o in outputs:
+                # each output is a dict
+                currOut = Output(o["value"], o["pubkey"])
+                outList.append(currOut)
+            # create Input object
+            inList = []
+            for i in inputs:
+                # each input is a dict with an output dict
+                # create output object from current input's dict
+                currOut = Output(i["output"]["value"], i["output"]["pubkey"])
+                currIn = Input(i["number"], currOut)
+                inList.append(currIn)
+       
+            currTx = Transaction(inList, outList, sig, num)
+            txList = [currTx] + txList
+    return txList
+
 
 # Serializes a list of JSON objects from a specific transaction
 # input(s): json object, term (input or output)
@@ -155,12 +201,12 @@ class Input:
 
 
 class Transaction:
-    def __init__(self, inputs, outputs, sig):
+    def __init__(self, inputs, outputs, sig, number):
         self.input = inputs
         self.output = outputs
         # is a signature object with both: sig.message, sig.signature
         self.sig = sig
-        self.number = 0
+        self.number = number
 
     def serialize_self(self):
         s = []
@@ -250,6 +296,7 @@ class Node:
         self.node_list = []
         self.current_max_height_tree_node = self.root
         self.q = queue.Queue()
+        self.txq = queue.Queue()
         self.name = str(name)
 
     # Checks that tx number has not been used in any prevBlocks
@@ -269,19 +316,20 @@ class Node:
     # Output exists in named transaction - this function checks for/matches numbers and output to an earlier tx
     def verify_tx_inputs(self, local_tx:Transaction):
         flag = 1
-        flag2 = 1
         for x in local_tx.input:
             y = self.current_max_height_tree_node
-            flag2 += 1
-            while(flag < flag2):
+            while(y != None):
                 if x.number == y.block.tx.number:
+                    found = 1
                     for z in y.block.tx.output:
                         if z.compare(x.output):
                             flag += 1
-                elif y.prevBlock is not None:
-                    y = y.prevBlock
+                            y = None
+                            found = 0
+                    if (found == 1):
+                        return 0
                 else:
-                    break
+                    y = y.prevBlock
         return max(flag - len(local_tx.input), 0)
 
     # Checks public key for all inputs, checks signature
@@ -296,9 +344,11 @@ class Node:
         message += serialize_list(tx.output, "output")
         message = message.encode("utf-8")
         verify_key = nacl.signing.VerifyKey(pubkey1, encoder=nacl.encoding.HexEncoder)
-        return verify_key.verify(message, tx.sig.signature)
+        try:
+            return verify_key.verify(message, tx.sig.signature)
+        except Exception:
+            return 0
 
-    # ? Not sure if this logic is right
     def verify_double_spend(self, tx:Transaction):
         if (self.current_max_height_tree_node == self.root):
             return 1
@@ -336,18 +386,18 @@ class Node:
         flag *= self.verify_sum(tx)
 
         if (tx.verify_number_hash() == 0):
-            print("tx.verify_number_hash() = 0")
+            print("====ALERT====tx.verify_number_hash() = 0")
         if (self.verify_not_used(tx, treenode) == 0):
-            print("self.verify_not_used(tx, treenode) = 0")
+            print("====ALERT====self.verify_not_used(tx, treenode) = 0")
         if (self.verify_tx_inputs(tx) == 0):
-            print("self.verify_tx_inputs(tx) = 0")
+            print("====ALERT====self.verify_tx_inputs(tx) = 0")
         if (self.verify_public_key_signatures(tx) == 0):
-            print("self.verify_public_key_signatures(tx) = 0")
+            print("====ALERT====self.verify_public_key_signatures(tx) = 0")
         if (self.verify_double_spend(tx) == 0):
-            print("self.verify_double_spend(tx) = 0")
+            print("====ALERT====self.verify_double_spend(tx) = 0")
         if (self.verify_sum(tx) == 0):
-            print("self.verify_sum(tx) = 0")
-
+            print("====ALERT====self.verify_sum(tx) = 0") 
+        
         return bool(flag)
 
     def verify_pow(self, block:Block):
@@ -375,12 +425,8 @@ class Node:
     def update_longest_chain(self, new_block_tree_node):
         if (new_block_tree_node.height > self.current_max_height_tree_node.height):
             y = self.current_max_height_tree_node
-            print("old height = ", self.current_max_height_tree_node.height)
-            print("new height = ", new_block_tree_node.height)
             self.current_max_height_tree_node = new_block_tree_node
             if (new_block_tree_node.prevBlock != y):
-                print("new_block_tree_node.prevBlock: ", new_block_tree_node.prevBlock)
-                print("self.current_max_height_tree_node: ", self.current_max_height_tree_node)
                 while (y.prevBlock != None):
                     global_tx_pool.append(y.block.tx)
                     y = y.prevBlock
@@ -443,19 +489,27 @@ class Node:
         return None
 
     def mining(self, i):
-        while(True): #global variable
-            #sleep(random)
+        global doneflag
+        global global_tx_pool
+        while(doneflag != 0):
+            if doneflag == 1:
+                doneflag = 0
             if (not self.q.empty()):
                 new_block = self.q.get()
                 self.receive_block(new_block)
+            if (not self.txq.empty()):
+                new_tx = self.txq.get()
+                if self.verify(new_tx, self.current_max_height_tree_node) == True:
+                    self.mine_block(new_tx, self.current_max_height_tree_node.block)
             if(len(global_tx_pool) != 0):
                 new_tx = global_tx_pool[0]
                 del global_tx_pool[0]
+                for x in range(0,10):
+                    node_list[x].txq.put(new_tx)
                 if self.verify(new_tx, self.current_max_height_tree_node) == True:
                     self.mine_block(new_tx, self.current_max_height_tree_node.block)
-            if((len(global_tx_pool) == 0) and self.q.empty()):
-                return
-
+        print("===== TERMINATED ====== TERMINATED HEIGHT, NODE, TXQ, Q, global_tx_pool info:", node_list[i].current_max_height_tree_node.height, i, node_list[i].txq.qsize(), node_list[i].q.qsize(), len(global_tx_pool))
+ 
     # Writes the node's blockchain to a file
     # input(s): nodename
     # output(s): none
@@ -470,6 +524,7 @@ def myfunc(gen_block, i):
     node_list[i].mining(i)
     #el = blocklist(node_list[i].current_max_height_tree_node)
     print("len treenode list:", len(node_list[i].treenode_list))
+    print("height = {}".format(node_list[i].current_max_height_tree_node.height))
     node_list[i].writeBFile()
 
 
@@ -477,7 +532,13 @@ def myfunc(gen_block, i):
 
 
 def main():
-    ## Start of test.
+
+    txlist = readInTxFile('txfile.txt')
+    print("txlist = {}".format(txlist))
+    print("number of elements in txlist = {}".format(len(txlist)))
+
+
+## Start of test.
     signing_key = []
     verify_key = []
     verify_key_hex = []
@@ -501,7 +562,7 @@ def main():
     # generate arbitrary signature object (contains message and signature)
     arbi_signing_key = nacl.signing.SigningKey.generate()
     arbi_signed = arbi_signing_key.sign(b"arbitrary signing key")
-    gen_transaction = Transaction(empty_input_list, output_list, arbi_signed)
+    gen_transaction = Transaction(empty_input_list, output_list, arbi_signed, 0)
     gen_transaction.gen_number()
 
     j = gen_transaction.jsonify()
@@ -510,7 +571,8 @@ def main():
     gen_transaction.gen_number()
     gen_transaction_number = gen_transaction.number
 
-    #print("gen_transaction_number = {}".format(gen_transaction_number))
+
+
 
     arbiPrev = H(b'arbitrary prev').hexdigest()
     arbiNonce = H(b'arbitrary nonce').hexdigest()
@@ -521,8 +583,8 @@ def main():
     inputs_from_gen_tx = []
     outputs_from_gen_tx = []
     sig = []
- 
-    for i in range(0, 10):
+
+    for i in range(0, 8):
         new1 = []
         new2 = []
         new1.append(Input(gen_transaction_number, Output(100, verify_key_hex[i%8])))
@@ -531,17 +593,11 @@ def main():
         inputs_from_gen_tx.append(new1)
         outputs_from_gen_tx.append(new2)
 
-    for i in range(0, 10):
+    for i in range(0, 8):
         message = serialize_list(inputs_from_gen_tx[i%8], "input")
         message += serialize_list(outputs_from_gen_tx[i%8], "output")
         message = message.encode("utf-8")
         sig.append(signing_key[i%8].sign(message))
-
-    for i in range(0, 10):
-        global_tx_pool.append(Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], sig[i]))
-
-    for x in global_tx_pool:
-        x.gen_number()
 
     for i in range(0,10):
         node_list.append(Node(gen_block, i))
@@ -549,12 +605,31 @@ def main():
     for i in range(0,10):
         node_list[i].node_list = node_list
 
-    for x in range(0,10):
+    for x in range(0,8):
        mythread = Thread(target=myfunc, args=(gen_block, x))
        mythread.start()
+       print("length: ", node_list[i].current_max_height_tree_node.height)
+
+    #mess up 1 tx at a time to test verifiers
+    inputs_from_gen_tx[3][0].output.value = 0
+    #outputs_from_gen_tx[5][0].value = 0
+
+    for i in range(0, 8):
+        global_tx_pool_driver.append(Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], sig[i], 0))
+
+    for x in global_tx_pool_driver:
+        x.gen_number()
+
+    while(len(global_tx_pool_driver) != 0):
+        time.sleep(random.random())
+        global_tx_pool.append(global_tx_pool_driver[0])
+        del global_tx_pool_driver[0]
+
+    global doneflag
+    doneflag = 1
+    print()
 
 
-
-
+    
 if __name__ == "__main__":
     main()
