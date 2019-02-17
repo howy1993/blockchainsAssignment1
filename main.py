@@ -2,8 +2,11 @@ import json
 import nacl.encoding
 import nacl.signing
 import queue
+from threading import Thread
+import time
 from hashlib import sha256 as H
-
+global_tx_pool = []
+node_list = []
 
 # Serializes a list of JSON objects from a specific transaction
 # input(s): json object, term (input or output)
@@ -64,13 +67,10 @@ def serialize_pre_block(tx, prev, nonce):
 # input(s): b which is a Block object
 # output(s): string serialization of the Block attributes
 def serialize_block(b):
-    print("====preparing to serialize block===")
-    print("b = {}".format(b))
-    print("b.tx = {}".format(b.tx))
     s = []
     s.append(b.tx.serialize_self())
     s.append(str(b.prev))
-    s.append(str(b.nonce)) 
+    s.append(str(b.nonce))
     s.append(str(b.pow))
 
     return ''.join(s)
@@ -85,7 +85,6 @@ def blocklist(tnode):
     # with given block with highest height, iterate backwards to genesis
     while (currNode is not None):
         # create JSON from current block
-        #jb = JsonBlock(currNode)
         db = dictBlock(currNode)
         blockchain = [db] + blockchain
         currNode = currNode.prevBlock
@@ -262,7 +261,7 @@ class Node:
             else:
                 y = y.prevBlock
 
-        return 1 
+        return 1
 
     def node_name(self):
         return self.name
@@ -355,7 +354,7 @@ class Node:
         #Check that PoW is below target
         return (block.pow < hex(0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))
 
-    #verifying prevhash exists in the blockchain
+    # verifying prevhash exists in the blockchain
     def verify_prev_hash(self, block:Block):
         #Check that PoW generated from hashing block with appropriate nonce
         flag = 0
@@ -367,16 +366,25 @@ class Node:
                 flag = 1
         return flag
 
-    #implements validate tx in block too
+    # implements validate tx in block too
     def verify_block(self, block:Block, treenode:TreeNode):
         return (self.verify(block.tx, treenode) == 1 ==
                 self.verify_pow(block) == self.verify_prev_hash(block))
 
+    #updates longest chain for node. if overtaken, returns txs to global pool
     def update_longest_chain(self, new_block_tree_node):
         if (new_block_tree_node.height > self.current_max_height_tree_node.height):
+            y = self.current_max_height_tree_node
             print("old height = ", self.current_max_height_tree_node.height)
             print("new height = ", new_block_tree_node.height)
             self.current_max_height_tree_node = new_block_tree_node
+            if (new_block_tree_node.prevBlock != y):
+                print("new_block_tree_node.prevBlock: ", new_block_tree_node.prevBlock)
+                print("self.current_max_height_tree_node: ", self.current_max_height_tree_node)
+                while (y.prevBlock != None):
+                    global_tx_pool.append(y.block.tx)
+                    y = y.prevBlock
+
 
     def mine_block(self, tx:Transaction, prev:Block):
         proofow = hex(0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF + 1)
@@ -404,18 +412,28 @@ class Node:
             if (self != x):
                 x.q.put(new_block)
 
+
     def receive_block(self, new_block:Block):
+        fail_flag = 0
         linked_treenode = None
+        block_serialized = serialize_block(new_block)
+        block_encoded = block_serialized.encode('utf-8')
+        currhash = H(block_encoded).hexdigest()
         for x in self.treenode_list:
             block_serialized = serialize_block(x.block)
             block_encoded = block_serialized.encode('utf-8')
             prevhash = H(block_encoded).hexdigest()
             if (new_block.prev == prevhash):
                 linked_treenode = x
+            if (currhash == prevhash):
+                fail_flag = 1
         if (linked_treenode == None):
             print("ERROR ID 123")
-        # verify this block received is unique (diff tx or prev within)
-        #flag =
+
+        # verify this block received is unique in chain (diff tx or prev)
+        if fail_flag == 1:
+            return
+
         if self.verify_block(new_block, linked_treenode):
                 new_treenode = TreeNode(new_block, linked_treenode, linked_treenode.height+1)
                 self.treenode_list.append(new_treenode)
@@ -424,7 +442,7 @@ class Node:
         #print("couldn't find a matching prevhash")
         return None
 
-    def mining(self, global_tx_pool):
+    def mining(self, i):
         while(True): #global variable
             #sleep(random)
             if (not self.q.empty()):
@@ -446,6 +464,14 @@ class Node:
         el = blocklist(self.current_max_height_tree_node)
         with open(fname, 'w') as outfile:
             json.dump(el,  outfile, indent=4)
+
+
+def myfunc(gen_block, i):
+    node_list[i].mining(i)
+    #el = blocklist(node_list[i].current_max_height_tree_node)
+    print("len treenode list:", len(node_list[i].treenode_list))
+    node_list[i].writeBFile()
+
 
 
 
@@ -492,23 +518,10 @@ def main():
 
     # Generate genesis block
     gen_block = Block(gen_transaction, arbiPrev, arbiNonce, arbiPow)
-
-    # Initialize all nodes with genesis block
-    node_list = []
-    for i in range(0, 10):
-        node_list.append(Node(gen_block, i))
-        node_list[i].treenode_list.append(TreeNode(gen_block, None, 1))
-
-    # populate each node's node_list with every other node
-    for i in range(0, 10):
-        node_list[i].node_list = node_list
-
-    global_tx_pool = []
-    no_more_tx = 1
     inputs_from_gen_tx = []
     outputs_from_gen_tx = []
     sig = []
-
+ 
     for i in range(0, 10):
         new1 = []
         new2 = []
@@ -531,23 +544,15 @@ def main():
         x.gen_number()
 
     for i in range(0,10):
-        node_list[i].mining(global_tx_pool)
-        print("maxheight is:", node_list[i].current_max_height_tree_node.height)
+        node_list.append(Node(gen_block, i))
 
-    
+    for i in range(0,10):
+        node_list[i].node_list = node_list
 
-    # gets a blockchain represented as a list of blocks [genesis, block1, ..., blockn]
-    el = blocklist(node_list[i].current_max_height_tree_node)
+    for x in range(0,10):
+       mythread = Thread(target=myfunc, args=(gen_block, x))
+       mythread.start()
 
-    # converts list of blocks (type dict) to json
-    data = json.dumps(el, indent=4)
-
-    # write json blockchain to file
-    with open("test.json", 'w') as outfile:
-        json.dump(el, outfile, indent=4)
-
-
-    node_list[1].writeBFile()
 
 
 
