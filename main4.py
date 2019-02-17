@@ -6,12 +6,12 @@ from threading import Thread
 import time
 import random
 import sys
+import filecmp
 from hashlib import sha256 as H
 
 global_tx_pool = []
 global_tx_pool_driver = []
 node_list = []
-del_list = 0
 doneflag = 2
 
 # Serializes a list of JSON objects from a specific transaction
@@ -456,15 +456,17 @@ class Node:
         global doneflag
         global global_tx_pool
         while(doneflag != 0):
-            if doneflag == 1:
+            if (doneflag == 1):
                 doneflag = 0
             if (not self.q.empty()):
                 new_block = self.q.get()
                 self.receive_block(new_block)
+                #print("===== LAST ACTION is in q ====== TERMINATED HEIGHT, NODE, TXQ, Q, global_tx_pool info:", node_list[i].current_max_height_tree_node.height, i, node_list[i].txq.qsize(), node_list[i].q.qsize(), len(global_tx_pool))
             if (not self.txq.empty()):
                 new_tx = self.txq.get()
                 if self.verify(new_tx, self.current_max_height_tree_node) == True:
                     self.mine_block(new_tx, self.current_max_height_tree_node.block)
+                #print("===== LAST ACTION IS IN txq ====== TERMINATED HEIGHT, NODE, TXQ, Q, global_tx_pool info:", node_list[i].current_max_height_tree_node.height, i, node_list[i].txq.qsize(), node_list[i].q.qsize(), len(global_tx_pool))
             if(len(global_tx_pool) != 0):
                 new_tx = global_tx_pool[0]
                 del global_tx_pool[0]
@@ -472,6 +474,7 @@ class Node:
                     node_list[x].txq.put(new_tx)
                 if self.verify(new_tx, self.current_max_height_tree_node) == True:
                     self.mine_block(new_tx, self.current_max_height_tree_node.block)
+                #print("===== LAST ACTION IS IN global_tx_pool ====== TERMINATED HEIGHT, NODE, TXQ, Q, global_tx_pool info:", node_list[i].current_max_height_tree_node.height, i, node_list[i].txq.qsize(), node_list[i].q.qsize(), len(global_tx_pool))
         print("===== TERMINATED ====== TERMINATED HEIGHT, NODE, TXQ, Q, global_tx_pool info:", node_list[i].current_max_height_tree_node.height, i, node_list[i].txq.qsize(), node_list[i].q.qsize(), len(global_tx_pool))
 
     # Writes the node's blockchain to a file
@@ -522,9 +525,6 @@ def main():
     gen_transaction.gen_number()
     gen_transaction_number = gen_transaction.number
 
-
-
-
     arbiPrev = H(b'arbitrary prev').hexdigest()
     arbiNonce = H(b'arbitrary nonce').hexdigest()
     arbiPow = H(b'arbitrary pow').hexdigest()
@@ -556,14 +556,13 @@ def main():
     for i in range(0,10):
         node_list[i].node_list = node_list
 
-    for x in range(0,8):
+    for x in range(0,10):
        mythread = Thread(target=myfunc, args=(gen_block, x))
        mythread.start()
-       print("length: ", node_list[i].current_max_height_tree_node.height)
 
     #mess up 1 tx at a time to test verifiers
     inputs_from_gen_tx[3][0].output.value = 0
-    #outputs_from_gen_tx[5][0].value = 0
+    outputs_from_gen_tx[5][0].value = 0
 
     for i in range(0, 8):
         global_tx_pool_driver.append(Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], sig[i], 0))
@@ -571,13 +570,29 @@ def main():
     for x in global_tx_pool_driver:
         x.gen_number()
 
+    #mess up numbers - THIS MAKES IT INFINITE LOOP
+    global_tx_pool_driver[2].input[0].number = global_tx_pool_driver[2].number
+
+
     while(len(global_tx_pool_driver) != 0):
         time.sleep(random.random())
         global_tx_pool.append(global_tx_pool_driver[0])
         del global_tx_pool_driver[0]
 
+    time.sleep(2)
     global doneflag
-    doneflag = 1
-    print()
+    while(doneflag == 2):
+        counter = 0
+        for x in range(0,9):
+            currheight1 = node_list[i].current_max_height_tree_node.height
+            currheight2 = node_list[i-1].current_max_height_tree_node.height
+            if (currheight1 == currheight2):
+                counter += 1
+        if counter == 9:
+            doneflag = 1
+
+    while(doneflag != 0):
+        print()
+
 if __name__ == "__main__":
     main()
