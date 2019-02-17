@@ -454,6 +454,7 @@ class Node:
 
     def mining(self, i):
         global doneflag
+        global global_tx_pool
         while(doneflag != 0):
             if doneflag == 1:
                 doneflag = 0
@@ -471,7 +472,7 @@ class Node:
                     node_list[x].txq.put(new_tx)
                 if self.verify(new_tx, self.current_max_height_tree_node) == True:
                     self.mine_block(new_tx, self.current_max_height_tree_node.block)
-        print("===== TERMINATED ====== TERMINATED HEIGHT, NODE: ", node_list[i].current_max_height_tree_node.height, i)
+        print("===== TERMINATED ====== TERMINATED HEIGHT, NODE, TXQ, Q, global_tx_pool info:", node_list[i].current_max_height_tree_node.height, i, node_list[i].txq.qsize(), node_list[i].q.qsize(), len(global_tx_pool))
 
     # Writes the node's blockchain to a file
     # input(s): nodename
