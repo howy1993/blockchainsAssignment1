@@ -64,28 +64,32 @@ def serialize_pre_block(tx, prev, nonce):
 # input(s): b which is a Block object
 # output(s): string serialization of the Block attributes
 def serialize_block(b):
+    print("====preparing to serialize block===")
+    print("b = {}".format(b))
+    print("b.tx = {}".format(b.tx))
     s = []
     s.append(b.tx.serialize_self())
     s.append(str(b.prev))
-    s.append(str(b.nonce))
+    s.append(str(b.nonce)) 
     s.append(str(b.pow))
+
     return ''.join(s)
 
 
 # Creates a block list in JSON
 # inputs(s): treenode block with highest height
-# output(s): list of JSON blocks
+# output(s): list of dict blocks
 def blocklist(tnode):
     currNode = tnode
     blockchain = []
-
     # with given block with highest height, iterate backwards to genesis
-    while (currNode.prevBlock is not None):
+    while (currNode is not None):
         # create JSON from current block
-        jb = JsonBlock(tnode)
-        blockchain = [jb] + blockchain
+        #jb = JsonBlock(currNode)
+        db = dictBlock(currNode)
+        blockchain = [db] + blockchain
         currNode = currNode.prevBlock
-        return blockchain
+    return blockchain
 
 
 # Helper function for test code for serializing list
@@ -112,16 +116,24 @@ def JsonBlock(tnode):
     # load json into dict
     data = json.loads(tnode.block.tx.jsonify())
     jsonBlock["tx"] = data
-
-    # create hash of previous block
-    prevBlock = tnode.block.prev
-    prevBlockSerial = serialize_block(prevBlock)
-    prevBlockEncode = prevBlockSerial.encode('utf-8')
-    prevBlockHash = H(prevBlockEncode)
-    jsonBlock["prev"] = prevBlockHash.hexdigest()
+    jsonBlock["prev"] = tnode.block.prev
     jsonBlock["nonce"] = str(tnode.block.nonce)
     jsonBlock["pow"] = str(tnode.block.pow)
-    return json.dumps(jsonBlock)
+    return json.dumps(jsonBlock, indent=4)
+
+
+# Creates a dictionary representation of a block
+# input(s): a treenode
+# output(s): a dictionary represntation of a block
+def dictBlock(tnode):
+    dBlock = {}
+    # load json into dictionary
+    data = json.loads(tnode.block.tx.jsonify())
+    dBlock["tx"] = data
+    dBlock["prev"] = tnode.block.prev
+    dBlock["nonce"] = str(tnode.block.nonce)
+    dBlock["pow"] = str(tnode.block.pow)
+    return dBlock
 
 
 class Output:
@@ -196,7 +208,7 @@ class Transaction:
         jsonObj["sig"] = self.sig.signature.hex()
         jsonObj["number"] = self.number
 
-        return json.dumps(jsonObj, indent=4)
+        return json.dumps(jsonObj)
 
 
     def show(self):
@@ -218,7 +230,7 @@ class Block:
 
     def jsonify():
         jsonObj = {}
-        jsonObj["tx"] = self.tx
+        jsonObj["tx"] = self.tx.jsonify()
         jsonObj["prev"] = self.prev
         jsonObj["nonce"] = self.nonce
         jsonObj["pow"] = self.proofow
@@ -427,13 +439,13 @@ class Node:
                 return
 
     # Writes the node's blockchain to a file
-    # input(s): nodename, JSON representation of blockchain
+    # input(s): nodename
     # output(s): none
-    def writeBFile(self, b):
+    def writeBFile(self):
         fname = "node_{}_blockchain.json".format(self.name)
-        data = json.loads(b)
+        el = blocklist(self.current_max_height_tree_node)
         with open(fname, 'w') as outfile:
-            json.dump(data,  outfile, indent=4)
+            json.dump(el,  outfile, indent=4)
 
 
 
@@ -484,7 +496,7 @@ def main():
     # Initialize all nodes with genesis block
     node_list = []
     for i in range(0, 10):
-        node_list.append(Node(gen_block))
+        node_list.append(Node(gen_block, i))
         node_list[i].treenode_list.append(TreeNode(gen_block, None, 1))
 
     # populate each node's node_list with every other node
@@ -522,7 +534,22 @@ def main():
         node_list[i].mining(global_tx_pool)
         print("maxheight is:", node_list[i].current_max_height_tree_node.height)
 
-    #blocklist(node_list[i].current_max_height_tree_node)
+    
+
+    # gets a blockchain represented as a list of blocks [genesis, block1, ..., blockn]
+    el = blocklist(node_list[i].current_max_height_tree_node)
+
+    # converts list of blocks (type dict) to json
+    data = json.dumps(el, indent=4)
+
+    # write json blockchain to file
+    with open("test.json", 'w') as outfile:
+        json.dump(el, outfile, indent=4)
+
+
+    node_list[1].writeBFile()
+
+
 
 if __name__ == "__main__":
     main()
