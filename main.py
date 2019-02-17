@@ -232,13 +232,14 @@ class TreeNode:
         self.height = height
 
 class Node:
-    def __init__(self, gen_block:Block):
+    def __init__(self, gen_block:Block, name):
         self.root = TreeNode(gen_block, None, 1)
         self.treenode_list = []
         self.treenode_list.append(self.root)
         self.node_list = []
         self.current_max_height_tree_node = self.root
         self.q = queue.Queue()
+        self.name = str(name)
 
     # Checks that tx number has not been used in any prevBlocks
     def verify_not_used(self, local_tx:Transaction, treenode:TreeNode):
@@ -249,7 +250,10 @@ class Node:
             else:
                 y = y.prevBlock
 
-        return 1
+        return 1 
+
+    def node_name(self):
+        return self.name
 
     # Output exists in named transaction - this function checks for/matches numbers and output to an earlier tx
     def verify_tx_inputs(self, local_tx:Transaction):
@@ -421,6 +425,17 @@ class Node:
                     self.mine_block(new_tx, self.current_max_height_tree_node.block)
             if((len(global_tx_pool) == 0) and self.q.empty()):
                 return
+
+    # Writes the node's blockchain to a file
+    # input(s): nodename, JSON representation of blockchain
+    # output(s): none
+    def writeBFile(self, b):
+        fname = "node_{}_blockchain.json".format(self.name)
+        data = json.loads(b)
+        with open(fname, 'w') as outfile:
+            json.dump(data,  outfile, indent=4)
+
+
 
 
 def main():
