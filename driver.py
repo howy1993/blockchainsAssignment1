@@ -5,12 +5,10 @@ import queue
 from threading import Thread
 import time
 import random
-import sys
-import filecmp
 from hashlib import sha256 as H
 
-global_tx_pool = []
-global_tx_pool_driver = []
+global_txpool = []
+global_txpool_driver = []
 node_list = []
 doneflag = 2
 
@@ -37,17 +35,14 @@ def serialize(tx, term):
 # output(s): a serialization of the JSON elements into a number
 def generate_number(tx):
     serials = []
-    # serialize each transaction (each input and output)
     for ele in ["input", "output"]:
         res = serialize(tx, ele)
         serials.append(res)
 
     d = json.loads(tx)
-    # add signature
     serials.append(d["sig"])
     joinedSerials = "".join(serials)
     encodedSerials = joinedSerials.encode('utf-8')
-    # hash the serialized data
     hashedSerials = H(encodedSerials)
 
     return hashedSerials
@@ -57,7 +52,6 @@ def generate_number(tx):
 # input(s): transaction, prev hash, and nonce
 # output(s): string concatenation
 def serialize_pre_block(tx, prev, nonce):
-    # serialize specifically for a transaction
     serials = []
     for t in ["number", "input", "output", "sig"]:
         res = serialize(tx.jsonify(), t)
@@ -150,8 +144,7 @@ class Output:
         if self.value == obj2.value:
             if self.pubkey == obj2.pubkey:
                 return 1
-        else:
-            return 0
+        return 0
 
 
 class Input:
@@ -164,7 +157,6 @@ class Transaction:
     def __init__(self, inputs, outputs, sig, number):
         self.input = inputs
         self.output = outputs
-        # is a signature object with both: sig.message, sig.signature
         self.sig = sig
         self.number = number
 
@@ -172,8 +164,6 @@ class Transaction:
         s = []
         s.append(serialize(self.jsonify(), "input"))
         s.append(serialize(self.jsonify(), "output"))
-        # convert signature (bytes) to hex format (str) for serialization
-        # can revert sig (str) back to bytes with bytes.fromhex(sig)
         s.append(self.sig.signature.hex())
         s.append(str(self.number))
         return ''.join(s)
@@ -191,7 +181,6 @@ class Transaction:
 
     def jsonify(self):
         jsonObj = {}
-
         inputList = []
 
         for i in self.input:
@@ -250,11 +239,10 @@ class TreeNode:
 
 class Node:
     def __init__(self, gen_block:Block, name):
-        self.root = TreeNode(gen_block, None, 1)
+        self.max_height_treenode = TreeNode(gen_block, None, 1)
         self.treenode_list = []
-        self.treenode_list.append(self.root)
+        self.treenode_list.append(self.max_height_treenode)
         self.node_list = []
-        self.current_max_height_tree_node = self.root
         self.q = queue.Queue()
         self.txq = queue.Queue()
         self.name = str(name)
@@ -267,7 +255,6 @@ class Node:
                 return 0
             else:
                 y = y.prevBlock
-
         return 1
 
     def node_name(self):
@@ -302,7 +289,7 @@ class Node:
         for x in tx.input:
             if x.output.pubkey != pubkey1:
                 return 0
-        # serializes content and verifies signature to key
+
         message = serialize_list(tx.input, "input")
         message += serialize_list(tx.output, "output")
         message = message.encode("utf-8")
@@ -312,7 +299,7 @@ class Node:
         except Exception:
             return 0
 
-    # ? Not sure if this logic is right
+    # checks for double spend
     def verify_double_spend(self, tx:Transaction, treenode:TreeNode):
         for x in tx.input:
             i = treenode
@@ -369,12 +356,12 @@ class Node:
 
     #updates longest chain for node. if overtaken, returns txs to global pool
     def update_longest_chain(self, new_block_tree_node):
-        if (new_block_tree_node.height > self.current_max_height_tree_node.height):
-            y = self.current_max_height_tree_node
-            self.current_max_height_tree_node = new_block_tree_node
+        if (new_block_tree_node.height > self.max_height_treenode.height):
+            y = self.max_height_treenode
+            self.max_height_treenode = new_block_tree_node
             if (new_block_tree_node.prevBlock != y):
                 while (y != None):
-                    global_tx_pool.append(y.block.tx)
+                    global_txpool.append(y.block.tx)
                     y = y.prevBlock
 
 
@@ -391,22 +378,19 @@ class Node:
             proofow = H(block_message.encode('utf-8'))
             proofow = proofow.digest()
             proofow = proofow.hex()
-
         # Once verified, push nonce/pow/prev into a new block and send it out
         new_block = Block(tx, prevhash, nonce, proofow)
-        new_treenode = TreeNode(new_block, self.current_max_height_tree_node, self.current_max_height_tree_node.height+1)
+        new_treenode = TreeNode(new_block, self.max_height_treenode, self.max_height_treenode.height+1)
         self.treenode_list.append(new_treenode)
         self.update_longest_chain(new_treenode)
         self.send_block(new_block)
 
     def send_block(self, new_block):
         for x in self.node_list:
-            if (self != x):
+            if (x != self):
                 x.q.put(new_block)
 
-
     def receive_block(self, new_block:Block):
-        fail_flag = 0
         linked_treenode = None
         block_serialized = serialize_block(new_block)
         block_encoded = block_serialized.encode('utf-8')
@@ -418,23 +402,17 @@ class Node:
             if (new_block.prev == prevhash):
                 linked_treenode = x
             if (currhash == prevhash):
-                fail_flag = 1
+                return
         if (linked_treenode == None):
-            return
-
-        # verify this block received is unique in chain (diff tx or prev)
-        if fail_flag == 1:
             return
         if self.verify_block(new_block, linked_treenode):
                 new_treenode = TreeNode(new_block, linked_treenode, linked_treenode.height+1)
                 self.treenode_list.append(new_treenode)
                 self.update_longest_chain(new_treenode)
-                return
-        return None
 
     def mining(self, i):
         global doneflag
-        global global_tx_pool
+        global global_txpool
         while(doneflag != 0):
             if (doneflag == 1):
                 doneflag = 0
@@ -443,29 +421,27 @@ class Node:
                 self.receive_block(new_block)
             if (not self.txq.empty()):
                 new_tx = self.txq.get()
-                if self.verify(new_tx, self.current_max_height_tree_node) == True:
-                    self.mine_block(new_tx, self.current_max_height_tree_node.block)
-            if(len(global_tx_pool) != 0):
-                new_tx = global_tx_pool[0]
-                del global_tx_pool[0]
+                if self.verify(new_tx, self.max_height_treenode):
+                    self.mine_block(new_tx, self.max_height_treenode.block)
+            if(len(global_txpool) != 0):
+                new_tx = global_txpool[0]
+                del global_txpool[0]
                 for x in range(0,10):
                     node_list[x].txq.put(new_tx)
-                if self.verify(new_tx, self.current_max_height_tree_node) == True:
-                    self.mine_block(new_tx, self.current_max_height_tree_node.block)
-        print("===== TERMINATED ====== TERMINATED HEIGHT, NODE, TXQ, Q, global_tx_pool info:", node_list[i].current_max_height_tree_node.height, i, node_list[i].txq.qsize(), node_list[i].q.qsize(), len(global_tx_pool))
+                if self.verify(new_tx, self.max_height_treenode):
+                    self.mine_block(new_tx, self.max_height_treenode.block)
 
     # Writes the node's blockchain to a file
     # input(s): nodename
     # output(s): none
     def writeBFile(self):
-        fname = "{}s_node_blockchain.json".format(self.name)
-        el = blocklist(self.current_max_height_tree_node)
+        fname = "node_{}_blockchain.json".format(self.name)
+        el = blocklist(self.max_height_treenode)
         with open(fname, 'w') as outfile:
             json.dump(el,  outfile, indent=4)
 
 def myfunc(gen_block, i):
     node_list[i].mining(i)
-    #el = blocklist(node_list[i].current_max_height_tree_node)
     node_list[i].writeBFile()
 
 def main():
@@ -485,7 +461,7 @@ def main():
     bytes_gen_array.append(b'00000000000000000000000000000006')
     bytes_gen_array.append(b'00000000000000000000000000000007')
 
-    # Generate 8 random pksk pairs
+    # Generate 8 random pksk pairs and give them coins
     for i in range(0, 8):
         signing_key_new = nacl.signing.SigningKey(bytes_gen_array[i])
         signing_key.append(signing_key_new)
@@ -493,24 +469,18 @@ def main():
         verify_key_hex_new = verify_key_new.encode(encoder=nacl.encoding.HexEncoder)
         verify_key.append(verify_key_new)
         verify_key_hex.append(verify_key_hex_new)
+
     output_list = []
-    # Generate contents for gen block. All 8 pksk pairs get 100 coins
     for i in range(0, 8):
         output_list.append(Output(100, verify_key_hex[i%8]))
-
     empty_input_list = []
-
-    # generate arbitrary signature object (contains message and signature)
     arbi_signing_key = nacl.signing.SigningKey(b'00000000000000000000000000000007')
     arbi_signed = arbi_signing_key.sign(b"arbitrary signing key")
     gen_transaction = Transaction(empty_input_list, output_list, arbi_signed, 0)
     gen_transaction.gen_number()
-
     j = gen_transaction.jsonify()
-
-    # generate the number for the transaction
     gen_transaction.gen_number()
-    gen_transaction_number = gen_transaction.number
+    gen_tx_num = gen_transaction.number
 
     arbiPrev = H(b'arbitrary prev').hexdigest()
     arbiNonce = H(b'arbitrary nonce').hexdigest()
@@ -525,7 +495,7 @@ def main():
     for i in range(0, 8):
         new1 = []
         new2 = []
-        new1.append(Input(gen_transaction_number, Output(100, verify_key_hex[i%8])))
+        new1.append(Input(gen_tx_num, Output(100, verify_key_hex[i%8])))
         k = (i+3)%8
         new2.append(Output(100,verify_key_hex[k]))
         inputs_from_gen_tx.append(new1)
@@ -540,71 +510,65 @@ def main():
     for i in range(0,10):
         node_list.append(Node(gen_block, i))
 
-    for i in range(0,10):
-        node_list[i].node_list = node_list
-
     for x in range(0,10):
-       mythread = Thread(target=myfunc, args=(gen_block, x))
-       mythread.start()
+        node_list[x].node_list = node_list
+        mythread = Thread(target=myfunc, args=(gen_block, x))
+        mythread.start()
 
     for i in range(0, 8):
-        global_tx_pool_driver.append(Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], sig[i], 0))
+        global_txpool_driver.append(Transaction(inputs_from_gen_tx[i], outputs_from_gen_tx[i], sig[i], 0))
+        global_txpool_driver[i].gen_number()
 
-    for x in global_tx_pool_driver:
-        x.gen_number()
-
-    #creates and inserts txs here
+    #creates and inserts bad txs here
     garbagelist = []
-    garbagelist.append(Input(gen_transaction_number, Output(0, verify_key_hex[3])))
-    garbage_tx_3 = Transaction(garbagelist, outputs_from_gen_tx[3], sig[3], 0)
-    garbage_tx_3.gen_number()
-    global_tx_pool_driver.insert(3, garbage_tx_3)
+    garbagelist.append(Input(gen_tx_num, Output(0, verify_key_hex[3])))
+    garbage_tx_1 = Transaction(garbagelist, outputs_from_gen_tx[3], sig[3], 0)
+    garbage_tx_1.gen_number()
+    global_txpool_driver.insert(3, garbage_tx_1)
 
     garbagelist2 = []
     garbagelist2.append(Output(0, verify_key_hex[5]))
-    garbage_tx_5 = Transaction(inputs_from_gen_tx[5], garbagelist2, sig[5], 0)
-    garbage_tx_5.gen_number()
-    global_tx_pool_driver.insert(5, garbage_tx_5)
+    garbage_tx_2 = Transaction(inputs_from_gen_tx[5], garbagelist2, sig[5], 0)
+    garbage_tx_2.gen_number()
+    global_txpool_driver.insert(5, garbage_tx_2)
 
-    newnumber = global_tx_pool_driver[2].number
-    garbage_tx_2 = Transaction(inputs_from_gen_tx[3], outputs_from_gen_tx[3], sig[3], newnumber)
-    global_tx_pool_driver.insert(2, garbage_tx_2)
+    newnumber = global_txpool_driver[2].number
+    garbage_tx_3 = Transaction(inputs_from_gen_tx[3], outputs_from_gen_tx[3], sig[3], newnumber)
+    global_txpool_driver.insert(2, garbage_tx_3)
 
-    #empty tx
-    garbage_tx_0 = Transaction(None, None, sig[3], 0)
-    global_tx_pool_driver.insert(7, garbage_tx_0)
+    garbage_tx_4 = global_txpool_driver[1]
+    global_txpool_driver.append(garbage_tx_4)
 
-    #empty tx 2
-    garbage_tx_1 = Transaction(None, None, None, None)
-    global_tx_pool_driver.insert(8, garbage_tx_0)
-
-    garbage_tx_last = global_tx_pool_driver[1]
-    global_tx_pool_driver.append(garbage_tx_last)
+    #empty txs
+    garbage_tx_5 = Transaction(None, None, sig[3], 0)
+    global_txpool_driver.insert(7, garbage_tx_5)
+    garbage_tx_6 = Transaction(None, None, None, None)
+    global_txpool_driver.insert(8, garbage_tx_6)
 
     good_tx_inputs = []
-    good_tx_inputs.append(Input(global_tx_pool_driver[0].number, global_tx_pool_driver[0].output[0]))
+    good_tx_inputs.append(Input(global_txpool_driver[0].number, global_txpool_driver[0].output[0]))
     message = serialize_list(good_tx_inputs, "input")
-    message += serialize_list(global_tx_pool_driver[0].output, "output")
+    message += serialize_list(global_txpool_driver[0].output, "output")
     message = message.encode("utf-8")
     gensig = signing_key[3].sign(message)
-    good_tx_9 = Transaction(good_tx_inputs, global_tx_pool_driver[0].output, gensig, 0)
-    good_tx_9.gen_number()
-    global_tx_pool_driver.append(good_tx_9)
+    good_tx = Transaction(good_tx_inputs, global_txpool_driver[0].output, gensig, 0)
+    good_tx.gen_number()
+    global_txpool_driver.append(good_tx)
 
-    print("driver pool length:", len(global_tx_pool_driver))
+    print("driver pool length:", len(global_txpool_driver))
 
-    while(len(global_tx_pool_driver) != 0):
+    while(len(global_txpool_driver) != 0):
         time.sleep(random.random())
-        global_tx_pool.append(global_tx_pool_driver[0])
-        del global_tx_pool_driver[0]
+        global_txpool.append(global_txpool_driver[0])
+        del global_txpool_driver[0]
 
     time.sleep(3)
     global doneflag
     while(doneflag == 2):
         counter = 0
         for x in range(0,9):
-            currheight1 = node_list[i].current_max_height_tree_node.height
-            currheight2 = node_list[i-1].current_max_height_tree_node.height
+            currheight1 = node_list[i].max_height_treenode.height
+            currheight2 = node_list[i-1].max_height_treenode.height
             if (currheight1 == currheight2):
                 counter += 1
         if counter == 9:
