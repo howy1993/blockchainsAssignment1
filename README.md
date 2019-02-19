@@ -1,7 +1,6 @@
-# blockchainsAssignment1
-JHU CS 601.641
 ## Overview
 This implements a proof-of-work, UTXO blockchain in Python. Sha256 hash is from hashlib and digital signatures are ed25519 from pynacl.
+JHU CS 601.641
 
 ## Running the program 
 python3 driver.py
