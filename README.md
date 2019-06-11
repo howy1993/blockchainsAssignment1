@@ -1,6 +1,5 @@
 ## Overview
-This implements a proof-of-work, UTXO blockchain in Python. Sha256 hash is from hashlib and digital signatures are ed25519 from pynacl.
-JHU CS 601.641
+This implements a "minimum viable blockchain" in Python. Nodes run in separate threads validating transactions, performs proof-of-works and mines blocks. SHA256 hash is from hashlib and digital signatures use the ed25519 standard from pynacl.
 
 ## Running the program 
 python3 driver.py
@@ -10,5 +9,5 @@ A driver program initializes 15 transactions into a global pool. Nodes in differ
 We test several bad cases: double spends, blank fields in transactions, input sum != output sum as well as invalid utxo references. 
 
 ## Authors
-Howy Ho
+Howy
 Daniel Hwang
