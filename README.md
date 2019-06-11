@@ -4,7 +4,7 @@ This implements a "minimum viable blockchain" in Python. Nodes run in separate t
 The initial class assignment required a single file for submission. I've split the file into 3 different files for better readability. I've also added a test program, testdiff.py, that checks the diff between the node outputs
 
 ## Running the program and tests
-python3 driver.py
+python3 driver.py  
 python3 testdiff.py
 
 ## Tests
