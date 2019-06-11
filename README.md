@@ -11,5 +11,5 @@ python3 testdiff.py
 A driver program initializes 15 transactions into a global pool. 9 of these transactions are good and 6 are bad. For the bad transactions, we test: double spends, blank fields in transactions, input sum != output sum as well as invalid utxo references. Testdiff checks the view of node 0 against every other node i and outputs if there is a difference. 
 
 ## Authors
-Howy
+Howy  
 Daniel Hwang
